@@ -1,5 +1,9 @@
 {
-  "dependencies": {},
+  "workspaces": [
+    "packages/*",
+    "client",
+    "server"
+  ],
   "devDependencies": {
     "@playwright/test": "^1.58.2",
     "@types/pg": "^8.20.0",

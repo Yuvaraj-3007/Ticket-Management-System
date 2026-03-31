@@ -1,8 +1,13 @@
 import { useState } from "react";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import axios from "axios";
+import axios, { AxiosError } from "axios";
+import {
+  apiUsersSchema,
+  editUserSchema,
+  type ApiUser,
+  type EditUserInput,
+} from "@tms/core";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
@@ -34,132 +39,75 @@ import {
 
 const API_URL = import.meta.env.VITE_API_URL || "";
 
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  isActive: boolean;
-  createdAt: string;
-}
-
-// Zod schema for users returned by the API
-const apiUserSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  email: z.string().email(),
-  role: z.enum(["ADMIN", "AGENT"]),
-  isActive: z.boolean(),
-  createdAt: z.string(),
-});
-
-const apiUsersSchema = z.array(apiUserSchema);
-
-type ApiUser = z.infer<typeof apiUserSchema>;
-
-const userSchema = z.object({
-  name: z.string().min(1, "Name is required").max(128, "Name must be 128 characters or fewer"),
-  email: z.string().min(1, "Email is required").email("Enter a valid email"),
-  password: z.string().min(8, "Password must be at least 8 characters").max(128, "Password must be 128 characters or fewer"),
-  role: z.enum(["ADMIN", "AGENT"]),
-});
-
-const editUserSchema = z.object({
-  name: z.string().min(1, "Name is required").max(128, "Name must be 128 characters or fewer"),
-  email: z.string().min(1, "Email is required").email("Enter a valid email"),
-  password: z
-    .string()
-    .optional()
-    .refine((val) => !val || val.length >= 8, {
-      message: "Password must be at least 8 characters",
-    })
-    .refine((val) => !val || val.length <= 128, {
-      message: "Password must be 128 characters or fewer",
-    }),
-  role: z.enum(["ADMIN", "AGENT"]),
-});
-
-type CreateUserForm = z.infer<typeof userSchema>;
-type EditUserForm = z.infer<typeof editUserSchema>;
+type UserForm = EditUserInput;
+type ServerErrorResponse = { fieldErrors?: Record<string, string[]>; error?: string };
 
 function Users() {
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [serverError, setServerError] = useState("");
+  const [editingUser, setEditingUser] = useState<ApiUser | null>(null);
+  const [dialogError, setDialogError] = useState("");
+  const [pageError, setPageError] = useState("");
 
-  const createForm = useForm<CreateUserForm>({
-    resolver: zodResolver(userSchema),
-    defaultValues: { name: "", email: "", password: "", role: "AGENT" },
-    mode: "onBlur",
-  });
-
-  const editForm = useForm<EditUserForm>({
+  // Single form instance for both create and edit — editUserSchema covers both
+  const form = useForm<UserForm>({
     resolver: zodResolver(editUserSchema),
     defaultValues: { name: "", email: "", password: "", role: "AGENT" },
     mode: "onBlur",
   });
 
-  const form = editingUser ? editForm : createForm;
+  const watchedRole = useWatch({ control: form.control, name: "role" });
 
-  // watch role using the concrete form instance to avoid union overload issues
-  const roleValue = editingUser
-    ? ((editForm.watch("role") as unknown) as "ADMIN" | "AGENT")
-    : ((createForm.watch("role") as unknown) as "ADMIN" | "AGENT");
-
-  const { data: users = [], isLoading } = useQuery<ApiUser[]>({
+  const { data: users = [], isLoading, isError } = useQuery<ApiUser[]>({
     queryKey: ["users"],
     queryFn: async () => {
       const res = await axios.get(`${API_URL}/api/users`, {
         withCredentials: true,
       });
-      // Validate API response shape with Zod
       return apiUsersSchema.parse(res.data);
     },
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: CreateUserForm) =>
+    mutationFn: (data: UserForm) =>
       axios.post(`${API_URL}/api/users`, data, { withCredentials: true }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
       setDialogOpen(false);
     },
-    onError: (err: any) => {
-      const fieldErrors = err.response?.data?.fieldErrors || err.response?.data?.errors;
-      if (fieldErrors && typeof fieldErrors === "object") {
-        Object.entries(fieldErrors).forEach(([key, value]) => {
-          try {
-            form.setError(key as any, { type: "server", message: String(value) });
-          } catch (e) {
-            // ignore if field doesn't exist on the form
-          }
+    onError: (err: AxiosError<ServerErrorResponse>) => {
+      const fieldErrors = err.response?.data?.fieldErrors;
+      if (fieldErrors) {
+        Object.entries(fieldErrors).forEach(([key, messages]) => {
+          form.setError(key as keyof UserForm, {
+            type: "server",
+            message: Array.isArray(messages) ? messages[0] : String(messages),
+          });
         });
       } else {
-        setServerError(err.response?.data?.error || "Failed to create user");
+        setDialogError(err.response?.data?.error || "Failed to create user");
       }
     },
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) =>
+    mutationFn: ({ id, data }: { id: string; data: UserForm }) =>
       axios.put(`${API_URL}/api/users/${id}`, data, { withCredentials: true }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
       setDialogOpen(false);
     },
-    onError: (err: any) => {
-      const fieldErrors = err.response?.data?.fieldErrors || err.response?.data?.errors;
-      if (fieldErrors && typeof fieldErrors === "object") {
-        Object.entries(fieldErrors).forEach(([key, value]) => {
-          try {
-            form.setError(key as any, { type: "server", message: String(value) });
-          } catch (e) {
-            // ignore if field doesn't exist on the form
-          }
+    onError: (err: AxiosError<ServerErrorResponse>) => {
+      const fieldErrors = err.response?.data?.fieldErrors;
+      if (fieldErrors) {
+        Object.entries(fieldErrors).forEach(([key, messages]) => {
+          form.setError(key as keyof UserForm, {
+            type: "server",
+            message: Array.isArray(messages) ? messages[0] : String(messages),
+          });
         });
       } else {
-        setServerError(err.response?.data?.error || "Failed to update user");
+        setDialogError(err.response?.data?.error || "Failed to update user");
       }
     },
   });
@@ -174,22 +122,22 @@ function Users() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
     },
-    onError: (err: any) => {
-      setServerError(err.response?.data?.error || "Failed to update status");
+    onError: (err: AxiosError<ServerErrorResponse>) => {
+      setPageError(err.response?.data?.error || "Failed to update status");
     },
   });
 
   const openCreateDialog = () => {
     setEditingUser(null);
-    setServerError("");
-    createForm.reset({ name: "", email: "", password: "", role: "AGENT" });
+    setDialogError("");
+    form.reset({ name: "", email: "", password: "", role: "AGENT" });
     setDialogOpen(true);
   };
 
-  const openEditDialog = (user: User) => {
+  const openEditDialog = (user: ApiUser) => {
     setEditingUser(user);
-    setServerError("");
-    editForm.reset({
+    setDialogError("");
+    form.reset({
       name: user.name,
       email: user.email,
       password: "",
@@ -198,17 +146,22 @@ function Users() {
     setDialogOpen(true);
   };
 
-  const onSubmitCreate = (data: CreateUserForm) => {
-    setServerError("");
-    createMutation.mutate(data);
-  };
-
-  const onSubmitEdit = (data: EditUserForm) => {
-    if (!editingUser) return;
-    setServerError("");
-    const payload: any = { name: data.name, email: data.email, role: data.role };
-    if (data.password) payload.password = data.password;
-    updateMutation.mutate({ id: editingUser.id, data: payload });
+  const onSubmit = (data: UserForm) => {
+    if (editingUser) {
+      setDialogError("");
+      updateMutation.mutate({ id: editingUser.id, data });
+    } else {
+      // Password is required for create — enforce since the shared schema makes it optional
+      if (!data.password) {
+        form.setError("password", {
+          type: "manual",
+          message: "Password is required",
+        });
+        return;
+      }
+      setDialogError("");
+      createMutation.mutate(data);
+    }
   };
 
   if (isLoading) {
@@ -240,13 +193,7 @@ function Users() {
                 {Array.from({ length: 5 }).map((_, idx) => (
                   <TableRow key={idx}>
                     <TableCell>
-                      <div className="flex items-center gap-3">
-                        <Skeleton className="h-8 w-8 rounded-full" />
-                        <div className="w-full">
-                          <Skeleton className="h-4 w-32 mb-2" />
-                          <Skeleton className="h-3 w-40" />
-                        </div>
-                      </div>
+                      <Skeleton className="h-4 w-32" />
                     </TableCell>
                     <TableCell>
                       <Skeleton className="h-4 w-48" />
@@ -276,6 +223,19 @@ function Users() {
     );
   }
 
+  if (isError) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        <main className="max-w-7xl mx-auto px-4 py-8">
+          <div className="bg-destructive/10 text-destructive text-sm p-4 rounded-md">
+            Failed to load users. Please refresh the page.
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -285,9 +245,15 @@ function Users() {
           <Button onClick={openCreateDialog}>Add User</Button>
         </div>
 
-        {serverError && !dialogOpen && (
-          <div className="bg-destructive/10 text-destructive text-sm p-3 rounded-md mb-4">
-            {serverError}
+        {pageError && (
+          <div className="bg-destructive/10 text-destructive text-sm p-3 rounded-md mb-4 flex items-center justify-between">
+            <span>{pageError}</span>
+            <button
+              onClick={() => setPageError("")}
+              className="text-destructive hover:text-destructive/80 ml-2 text-xs underline"
+            >
+              Dismiss
+            </button>
           </div>
         )}
 
@@ -306,7 +272,10 @@ function Users() {
             <TableBody>
               {users.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                  <TableCell
+                    colSpan={6}
+                    className="text-center text-muted-foreground py-8"
+                  >
                     No users found. Click "Add User" to create one.
                   </TableCell>
                 </TableRow>
@@ -316,12 +285,16 @@ function Users() {
                     <TableCell className="font-medium">{user.name}</TableCell>
                     <TableCell>{user.email}</TableCell>
                     <TableCell>
-                      <Badge variant={user.role === "ADMIN" ? "default" : "secondary"}>
+                      <Badge
+                        variant={user.role === "ADMIN" ? "default" : "secondary"}
+                      >
                         {user.role}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={user.isActive ? "default" : "destructive"}>
+                      <Badge
+                        variant={user.isActive ? "default" : "destructive"}
+                      >
                         {user.isActive ? "Active" : "Inactive"}
                       </Badge>
                     </TableCell>
@@ -339,6 +312,10 @@ function Users() {
                       <Button
                         variant={user.isActive ? "destructive" : "outline"}
                         size="sm"
+                        disabled={
+                          toggleStatusMutation.isPending &&
+                          toggleStatusMutation.variables?.id === user.id
+                        }
                         onClick={() =>
                           toggleStatusMutation.mutate({
                             id: user.id,
@@ -346,7 +323,12 @@ function Users() {
                           })
                         }
                       >
-                        {user.isActive ? "Deactivate" : "Activate"}
+                        {toggleStatusMutation.isPending &&
+                        toggleStatusMutation.variables?.id === user.id
+                          ? "Saving..."
+                          : user.isActive
+                          ? "Deactivate"
+                          : "Activate"}
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -356,7 +338,13 @@ function Users() {
           </Table>
         </div>
 
-        <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setServerError(""); }}>
+        <Dialog
+          open={dialogOpen}
+          onOpenChange={(open) => {
+            setDialogOpen(open);
+            if (!open) setDialogError("");
+          }}
+        >
           <DialogContent>
             <DialogHeader>
               <DialogTitle>
@@ -364,27 +352,22 @@ function Users() {
               </DialogTitle>
             </DialogHeader>
 
-            {serverError && (
+            {dialogError && (
               <div className="bg-destructive/10 text-destructive text-sm p-3 rounded-md">
-                {serverError}
+                {dialogError}
               </div>
             )}
 
-            <form
-              onSubmit={form.handleSubmit(
-                editingUser
-                  ? (onSubmitEdit as any)
-                  : (onSubmitCreate as any)
-              )}
-              className="space-y-4"
-            >
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Name</Label>
                 <Input
                   id="name"
                   placeholder="Full name"
                   {...form.register("name")}
-                  className={form.formState.errors.name ? "border-destructive" : ""}
+                  className={
+                    form.formState.errors.name ? "border-destructive" : ""
+                  }
                 />
                 {form.formState.errors.name && (
                   <p className="text-destructive text-xs">
@@ -400,7 +383,9 @@ function Users() {
                   type="email"
                   placeholder="user@example.com"
                   {...form.register("email")}
-                  className={form.formState.errors.email ? "border-destructive" : ""}
+                  className={
+                    form.formState.errors.email ? "border-destructive" : ""
+                  }
                 />
                 {form.formState.errors.email && (
                   <p className="text-destructive text-xs">
@@ -411,14 +396,17 @@ function Users() {
 
               <div className="space-y-2">
                 <Label htmlFor="password">
-                  Password{editingUser ? " (leave blank to keep current)" : ""}
+                  Password
+                  {editingUser ? " (leave blank to keep current)" : ""}
                 </Label>
                 <Input
                   id="password"
                   type="password"
                   placeholder={editingUser ? "••••••••" : "Min 8 characters"}
                   {...form.register("password")}
-                  className={form.formState.errors.password ? "border-destructive" : ""}
+                  className={
+                    form.formState.errors.password ? "border-destructive" : ""
+                  }
                 />
                 {form.formState.errors.password && (
                   <p className="text-destructive text-xs">
@@ -429,14 +417,13 @@ function Users() {
 
               <div className="space-y-2">
                 <Label htmlFor="role">Role</Label>
-                {/** react-hook-form's union of form instances can make overloads unhappy; use the precomputed `roleValue` */}
                 <Select
-                  value={roleValue}
-                  onValueChange={(val: "ADMIN" | "AGENT" | null) => {
-                    if (val === null) return
-                    form.setValue("role", val, {
+                  value={watchedRole}
+                  onValueChange={(val) => {
+                    if (val === null) return;
+                    form.setValue("role", val as "ADMIN" | "AGENT", {
                       shouldValidate: true,
-                    })
+                    });
                   }}
                 >
                   <SelectTrigger id="role">
@@ -459,13 +446,15 @@ function Users() {
                 </Button>
                 <Button
                   type="submit"
-                  disabled={createMutation.isPending || updateMutation.isPending}
+                  disabled={
+                    createMutation.isPending || updateMutation.isPending
+                  }
                 >
-                  {(createMutation.isPending || updateMutation.isPending)
+                  {createMutation.isPending || updateMutation.isPending
                     ? "Saving..."
                     : editingUser
-                      ? "Update User"
-                      : "Create User"}
+                    ? "Update User"
+                    : "Create User"}
                 </Button>
               </div>
             </form>

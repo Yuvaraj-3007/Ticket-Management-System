@@ -8,6 +8,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "@tms/core": path.resolve(__dirname, "../packages/core/src/index.ts"),
     },
   },
   server: {

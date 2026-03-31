@@ -1,15 +1,15 @@
 import { Router, Request, Response } from "express";
+import { randomUUID } from "node:crypto";
 import { hashPassword } from "better-auth/crypto";
+import { Prisma } from "../generated/prisma/client.js";
 import prisma from "../lib/prisma.js";
 import { requireAdmin } from "../middleware/auth.js";
+import { createUserSchema, editUserSchema } from "@tms/core";
 
 const router = Router();
 
 // All routes require admin
 router.use(requireAdmin);
-
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const VALID_ROLES = ["ADMIN", "AGENT"];
 
 // GET /api/users — list all users
 router.get("/", async (_req: Request, res: Response) => {
@@ -33,39 +33,15 @@ router.get("/", async (_req: Request, res: Response) => {
 
 // POST /api/users — create a new user
 router.post("/", async (req: Request, res: Response) => {
-  const { name, email, password, role } = req.body;
-
-  if (!name || !email || !password) {
-    res.status(400).json({ error: "Name, email, and password are required" });
+  const parsed = createUserSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ fieldErrors: parsed.error.flatten().fieldErrors });
     return;
   }
-
-  if (!EMAIL_REGEX.test(email)) {
-    res.status(400).json({ error: "Invalid email address" });
-    return;
-  }
-
-  if (name.length > 128) {
-    res.status(400).json({ error: "Name must be 128 characters or fewer" });
-    return;
-  }
-
-  if (password.length < 8) {
-    res.status(400).json({ error: "Password must be at least 8 characters" });
-    return;
-  }
-
-  if (password.length > 128) {
-    res.status(400).json({ error: "Password must be 128 characters or fewer" });
-    return;
-  }
-
-  if (role && !VALID_ROLES.includes(role)) {
-    res.status(400).json({ error: "Role must be ADMIN or AGENT" });
-    return;
-  }
+  const { name, email, password, role } = parsed.data;
 
   try {
+    // Pre-check for a clear 409 (P2002 catch below handles the race)
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
       res.status(409).json({ error: "A user with this email already exists" });
@@ -73,72 +49,66 @@ router.post("/", async (req: Request, res: Response) => {
     }
 
     const hashedPassword = await hashPassword(password);
-    const userId = crypto.randomUUID();
+    const userId = randomUUID();
 
     // Password is stored on the Account model (Better Auth credential provider),
     // not on the User model — this is intentional and matches the schema.
-    const user = await prisma.user.create({
-      data: {
-        id: userId,
-        name,
-        email,
-        role: role || "AGENT",
-        emailVerified: true,
-        isActive: true,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        isActive: true,
-        createdAt: true,
-      },
-    });
+    const user = await prisma.$transaction(async (tx) => {
+      const newUser = await tx.user.create({
+        data: {
+          id: userId,
+          name,
+          email,
+          role: role ?? "AGENT",
+          emailVerified: true,
+          isActive: true,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          isActive: true,
+          createdAt: true,
+        },
+      });
 
-    await prisma.account.create({
-      data: {
-        id: crypto.randomUUID(),
-        userId,
-        accountId: userId,
-        providerId: "credential",
-        password: hashedPassword,
-      },
+      await tx.account.create({
+        data: {
+          id: randomUUID(),
+          userId,
+          accountId: userId,
+          providerId: "credential",
+          password: hashedPassword,
+        },
+      });
+
+      return newUser;
     });
 
     res.status(201).json(user);
-  } catch {
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      res.status(409).json({ error: "A user with this email already exists" });
+      return;
+    }
     res.status(500).json({ error: "Failed to create user" });
   }
 });
 
 // PUT /api/users/:id — update user name, email, role, and optionally password
 router.put("/:id", async (req: Request, res: Response) => {
-  const id = req.params.id as string;
-  const { name, email, role, password } = req.body;
+  const id = req.params.id;
 
-  if (email && !EMAIL_REGEX.test(email)) {
-    res.status(400).json({ error: "Invalid email address" });
+  const parsed = editUserSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ fieldErrors: parsed.error.flatten().fieldErrors });
     return;
   }
+  const { name, email, role, password } = parsed.data;
 
-  if (name && name.length > 128) {
-    res.status(400).json({ error: "Name must be 128 characters or fewer" });
-    return;
-  }
-
-  if (password && password.length < 8) {
-    res.status(400).json({ error: "Password must be at least 8 characters" });
-    return;
-  }
-
-  if (password && password.length > 128) {
-    res.status(400).json({ error: "Password must be 128 characters or fewer" });
-    return;
-  }
-
-  if (role && !VALID_ROLES.includes(role)) {
-    res.status(400).json({ error: "Role must be ADMIN or AGENT" });
+  if (!req.user) {
+    res.status(401).json({ error: "Not authenticated" });
     return;
   }
 
@@ -146,6 +116,12 @@ router.put("/:id", async (req: Request, res: Response) => {
     const existing = await prisma.user.findUnique({ where: { id } });
     if (!existing) {
       res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    // Prevent admin from removing their own admin role
+    if (role && role !== "ADMIN" && req.user.id === existing.id) {
+      res.status(400).json({ error: "You cannot remove your own admin role" });
       return;
     }
 
@@ -157,13 +133,10 @@ router.put("/:id", async (req: Request, res: Response) => {
       }
     }
 
+    // Use parsed values directly — Zod already validated name, email, and role
     const user = await prisma.user.update({
       where: { id },
-      data: {
-        ...(name && { name }),
-        ...(email && { email }),
-        ...(role && { role }),
-      },
+      data: { name, email, role },
       select: {
         id: true,
         name: true,
@@ -183,14 +156,18 @@ router.put("/:id", async (req: Request, res: Response) => {
     }
 
     res.json(user);
-  } catch {
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      res.status(409).json({ error: "A user with this email already exists" });
+      return;
+    }
     res.status(500).json({ error: "Failed to update user" });
   }
 });
 
 // PATCH /api/users/:id/status — activate/deactivate user
 router.patch("/:id/status", async (req: Request, res: Response) => {
-  const id = req.params.id as string;
+  const id = req.params.id;
   const { isActive } = req.body;
 
   if (typeof isActive !== "boolean") {

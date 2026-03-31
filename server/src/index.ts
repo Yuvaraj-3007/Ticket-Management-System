@@ -1,5 +1,5 @@
 import http from "http";
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
@@ -19,7 +19,7 @@ app.set("trust proxy", 1);
 // Security headers
 app.use(helmet());
 
-// Middleware
+// CORS
 app.use(cors({
   origin: process.env.CLIENT_URL || "http://localhost:5173",
   credentials: true,
@@ -28,7 +28,7 @@ app.use(cors({
 app.use(express.json({ limit: "50kb" }));
 app.use(express.urlencoded({ extended: true, limit: "50kb" }));
 
-// Rate limiting — applied in all environments (stricter in production)
+// General API rate limit — applied in all environments (stricter in production)
 const isProd = process.env.NODE_ENV === "production";
 
 const apiLimiter = rateLimit({
@@ -39,34 +39,6 @@ const apiLimiter = rateLimit({
 });
 app.use("/api", apiLimiter);
 
-// Stricter rate limit for auth sign-in endpoint
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: isProd ? 20 : 100,
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-// Prune expired entries every 15 minutes to prevent memory leak
-const authRateLimit = new Map<string, { count: number; resetAt: number }>();
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, entry] of authRateLimit) {
-    if (now > entry.resetAt) authRateLimit.delete(ip);
-  }
-}, 15 * 60 * 1000);
-
-function isAuthRateLimited(ip: string): boolean {
-  const now = Date.now();
-  const entry = authRateLimit.get(ip);
-  if (!entry || now > entry.resetAt) {
-    authRateLimit.set(ip, { count: 1, resetAt: now + 15 * 60 * 1000 });
-    return false;
-  }
-  entry.count++;
-  return entry.count > (isProd ? 20 : 100);
-}
-
 // Health check
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok" });
@@ -75,21 +47,22 @@ app.get("/api/health", (_req, res) => {
 // API routes
 app.use("/api/users", userRoutes);
 
-// Create HTTP server — route /api/auth to Better Auth, rest to Express
-const betterAuthHandler = toNodeHandler(auth);
-const server = http.createServer((req, res) => {
-  if (req.url?.startsWith("/api/auth/sign-in")) {
-    const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0].trim()
-      || req.socket.remoteAddress
-      || "unknown";
-    if (isAuthRateLimited(ip)) {
-      res.writeHead(429, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Too many login attempts. Try again later." }));
-      return;
-    }
-    betterAuthHandler(req, res);
+// Global error handler — converts Express HTML error pages to JSON
+// Must be registered after all routes
+app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  const status = (err as any)?.status ?? (err as any)?.statusCode ?? 500;
+  if ((err as any)?.type === "entity.parse.failed") {
+    res.status(400).json({ error: "Invalid JSON in request body" });
     return;
   }
+  res.status(status).json({ error: "Internal server error" });
+});
+
+// Create HTTP server — route /api/auth to Better Auth, rest to Express
+// Note: /api/auth bypasses Express middleware, so auth rate limiting is
+// handled by Better Auth's built-in protections
+const betterAuthHandler = toNodeHandler(auth);
+const server = http.createServer((req, res) => {
   if (req.url?.startsWith("/api/auth")) {
     betterAuthHandler(req, res);
   } else {

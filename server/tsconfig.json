@@ -10,7 +10,11 @@
     "rootDir": "./src",
     "resolveJsonModule": true,
     "declaration": true,
-    "types": ["bun-types"]
+    "types": ["bun-types"],
+    "baseUrl": ".",
+    "paths": {
+      "@tms/core": ["../packages/core/src/index.ts"]
+    }
   },
   "include": ["src/**/*"]
 }
