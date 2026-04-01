@@ -200,7 +200,7 @@ bun run prisma/seed.ts
 ### 5. Start development servers
 
 ```bash
-# Terminal 1 — Backend (port 5000)
+# Terminal 1 — Backend (port 4000)
 cd server && bun run src/index.ts
 
 # Terminal 2 — Frontend (port 5173)

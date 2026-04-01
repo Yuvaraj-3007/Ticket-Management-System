@@ -75,7 +75,7 @@ src/
 | Variable | Default | Description |
 |:---------|:--------|:------------|
 | `VITE_API_URL` | `""` | API base URL (empty = same origin via Vite proxy) |
-| `VITE_PROXY_TARGET` | `http://localhost:5000` | Backend URL for Vite dev proxy |
+| `VITE_PROXY_TARGET` | `http://localhost:4000` | Backend URL for Vite dev proxy |
 
 ## Routing
 
