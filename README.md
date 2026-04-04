@@ -7,8 +7,8 @@ A centralized ticket management system for tracking support requests, bugs, and 
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue?logo=typescript)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-blue?logo=postgresql)
 ![Prisma](https://img.shields.io/badge/Prisma-7-2D3748?logo=prisma)
-![E2E Tests](https://img.shields.io/badge/Playwright-124_tests-green?logo=playwright)
-![Unit Tests](https://img.shields.io/badge/Vitest-12_tests-green?logo=vitest)
+![E2E Tests](https://img.shields.io/badge/Playwright-158_tests-green?logo=playwright)
+![Unit Tests](https://img.shields.io/badge/Vitest-128_tests-green?logo=vitest)
 ![License](https://img.shields.io/badge/License-Proprietary-red)
 
 ---
@@ -24,7 +24,9 @@ A centralized ticket management system for tracking support requests, bugs, and 
 - [Demo Credentials](#demo-credentials)
 - [API Endpoints](#api-endpoints)
 - [Database Schema](#database-schema)
+- [Security](#security)
 - [Testing](#testing)
+- [Git Hooks (Lefthook)](#git-hooks-lefthook)
 - [Development](#development)
 - [License](#license)
 
@@ -43,8 +45,10 @@ Ticket Management System is a full-stack application designed to replace fragmen
 - **User Management** — Admin can create, edit, deactivate, and reactivate team members
 - **Ticket Intake** — Auto-create tickets from inbound email via webhook (`POST /api/webhooks/email`) with auto-generated IDs (TKT-0001 format)
 - **Ticket List** — Paginated, sortable, and filterable ticket table with search
-- **Ticket Detail** — Full ticket view with metadata, badges, and description
-- **Security** — Helmet headers, CORS restrictions, rate limiting, Zod input validation
+- **Ticket Detail** — Inline editing of status, category, and assignee directly on the detail page
+- **Reply Thread** — Comments on tickets with Agent/Customer sender type distinction
+- **AI-powered reply polishing** — Kimi/Moonshot API rewrites agent replies for clarity and professionalism
+- **Security** — Helmet headers, CORS restrictions, rate limiting, Zod input validation, prompt injection mitigation
 - **Shared Schemas** — `@tms/core` workspace package shares Zod schemas and constants between client and server
 
 ---
@@ -104,9 +108,10 @@ packages/core (@tms/core)
 Ticket-Management-System/
 ├── client/                        # React frontend
 │   ├── src/
-│   │   ├── components/            # Navbar, shadcn/ui components
-│   │   ├── pages/                 # Login, Dashboard, Users, Tickets, TicketDetail
-│   │   │   └── __tests__/         # Vitest unit tests (12 tests)
+│   │   ├── components/            # Navbar, TicketDetail, TicketReplies, EnumSelect, ui/ (textarea, ...)
+│   │   │   └── __tests__/         # TicketDetail.test.tsx, TicketReplies.test.tsx
+│   │   ├── pages/                 # Login, Dashboard, Users, Tickets, TicketDetailPage
+│   │   │   └── __tests__/         # Vitest unit tests (128 tests)
 │   │   └── lib/                   # Auth client, ticket-badges, utilities
 │   ├── vite.config.ts             # Vite + Vitest config
 │   └── package.json
@@ -134,7 +139,7 @@ Ticket-Management-System/
 │   ├── users.spec.ts              # User management tests (9 tests)
 │   ├── webhooks.spec.ts           # Webhook intake tests (28 tests)
 │   ├── tickets.spec.ts            # Tickets list/API tests (21 tests)
-│   ├── ticket-detail.spec.ts      # Ticket detail page tests (19 tests)
+│   ├── ticket-detail.spec.ts      # Ticket detail page tests (69 tests)
 │   ├── example.spec.ts            # Smoke test (1 test)
 │   ├── global-setup.ts            # Test DB migration & seed
 │   └── global-teardown.ts         # Test DB cleanup
@@ -187,6 +192,7 @@ TEST_BACKEND_URL=http://localhost:5001
 WEBHOOK_SECRET=
 ADMIN_EMAIL=admin@example.com
 ADMIN_PASSWORD=YourPassword@123
+MOONSHOT_API_KEY=your-moonshot-api-key
 ```
 
 ### 4. Set up the database
@@ -246,6 +252,13 @@ Open [http://localhost:5173](http://localhost:5173) to access the application.
 |:-------|:---------|:------------|
 | `GET` | `/api/tickets` | List tickets (sort, filter, paginate via query params) |
 | `GET` | `/api/tickets/:id` | Get a single ticket by ticketId (e.g. `TKT-0001`) |
+| `GET` | `/api/tickets/assignable-users` | Active users available for assignment |
+| `PATCH` | `/api/tickets/:id/assignee` | Assign or unassign a ticket |
+| `PATCH` | `/api/tickets/:id/status` | Update ticket status |
+| `PATCH` | `/api/tickets/:id/type` | Update ticket category/type |
+| `GET` | `/api/tickets/:id/comments` | List all comments for a ticket |
+| `POST` | `/api/tickets/:id/comments` | Add a comment to a ticket |
+| `POST` | `/api/tickets/:id/polish` | AI-polish a draft reply (Kimi/Moonshot API, rate-limited) |
 
 ### Webhooks
 
@@ -283,6 +296,24 @@ Open [http://localhost:5173](http://localhost:5173) to access the application.
 | **TicketType** | `BUG` `REQUIREMENT` `TASK` `SUPPORT` |
 | **Priority** | `LOW` `MEDIUM` `HIGH` `CRITICAL` |
 | **Status** | `OPEN` `IN_PROGRESS` `RESOLVED` `CLOSED` |
+| **CommentSenderType** | `AGENT` `CUSTOMER` |
+
+---
+
+## Security
+
+A security audit was completed on 2026-04-04. All identified issues (Critical, High, Medium, Low) were resolved. Key measures in place:
+
+| Measure | Detail |
+|:--------|:-------|
+| **Per-user AI rate limiting** | AI polish endpoint capped at 10 requests/minute per user |
+| **Server-side senderType** | `senderType` is derived from session on the server — clients cannot forge the sender |
+| **Session invalidation on password reset** | All existing sessions are destroyed when a user's password is changed |
+| **Prompt injection mitigation** | Structural delimiters separate system prompt from user-supplied content |
+| **MOONSHOT_API_KEY guard** | Server refuses to start in production if `MOONSHOT_API_KEY` is missing |
+| **Safe error logging** | SDK/AI errors are sanitised before logging — no internal stack traces leaked to clients |
+| **Helmet + CORS** | Security headers and origin restrictions on every response |
+| **Input validation** | Zod schemas validate all request bodies on every endpoint |
 
 ---
 
@@ -294,17 +325,21 @@ Open [http://localhost:5173](http://localhost:5173) to access the application.
 cd client
 
 # Run once
-bun run test:components
+npx vitest run
 
 # Watch mode
 bun run test:components:watch
 ```
 
-| Suite | Tests | Coverage |
-|:------|:------|:---------|
-| Users page rendering | 2 | User list, empty state |
-| Create user form | 10 | Validation, submit, server errors, cancel |
-| **Total** | **12** | |
+| Suite | Tests |
+|:------|:------|
+| TicketDetail component | 24 |
+| TicketReplies component | 27 |
+| Users page rendering | 2 |
+| Create user form | 10 |
+| TicketDetailPage (pages) | 46 |
+| Tickets page | 24 |
+| **Total** | **128** |
 
 ### E2E Tests (Playwright)
 
@@ -325,16 +360,18 @@ npx playwright show-report tests/playwright-report
 #### Test Infrastructure
 
 - **Test database:** `ticket_management_test` (isolated from dev)
-- **Test servers:** Backend on port 5001, Frontend on port 5174
+- **Test servers:** Backend on port 5001, Frontend on port 5175
 - **Setup:** Migrations + admin seed before each run
 - **Teardown:** All tables truncated after tests complete
 - **`TEST_BACKEND_URL`** in `server/.env` must point to port 5001 for e2e tests
 
 #### E2E Coverage
 
+> E2E tests cover only what cannot be tested with unit tests: real API calls, database persistence, browser navigation, and full user flows. Component rendering and interaction logic is covered by the 128 unit tests.
+
 | Suite | Tests | Coverage |
 |:------|:------|:---------|
-| Login page rendering | 4 | Form elements, field types, initial state |
+| Login rendering | 4 | Form elements, field types, initial state |
 | Successful login | 2 | Redirect, loading state |
 | Client-side validation | 6 | Empty fields, invalid email, short password |
 | Server-side errors | 4 | Wrong password, unknown email, error recovery |
@@ -347,12 +384,59 @@ npx playwright show-report tests/playwright-report
 | Edge cases & security | 12 | SQL injection, XSS, long inputs, signup disabled |
 | Auth API | 3 | Direct endpoint validation |
 | Smoke test | 1 | App loads |
-| User management — happy paths | 9 | List, create, edit, deactivate, reactivate |
+| User management | 5 | Real DB: create, update, deactivate, reactivate |
 | Webhook email intake | 28 | Create ticket, field mapping, validation, auth |
 | Tickets list & API | 21 | Sort, filter, paginate, auth, field validation |
-| Ticket detail — API | 6 | 200/401/404, required fields, ticketId/title match |
-| Ticket detail — UI | 13 | Navigation, heading, badges, metadata, back button |
-| **Total** | **124** | |
+| GET /api/tickets/:id API | 6 | 200/401/404, required fields |
+| Ticket detail — navigation | 5 | Auth redirect, URL nav, back button, list→detail, 404 |
+| GET assignable-users API | 3 | Auth, response shape |
+| PATCH assignee API | 6 | Assign, unassign, 400/404 cases |
+| Assign ticket — UI | 2 | Real PATCH: assign user, unassign |
+| PATCH status API | 5 | Update, invalid value, 404 |
+| PATCH type API | 5 | Update, invalid value, 404 |
+| Update status — UI | 2 | Real PATCH + persistence check |
+| Update category — UI | 2 | Real PATCH + persistence check |
+| GET comments API | 5 | Auth, empty array, fields shape |
+| POST comments API | 7 | Create, senderType, validation, 404 |
+| Replies — UI | 3 | Full post flow, count, Customer sender flow |
+| AI polish API | 4 | Auth, happy path, rate limit, validation |
+| **Total** | **158** | |
+
+---
+
+## Git Hooks (Lefthook)
+
+Pre-commit and pre-push hooks are enforced via [Lefthook](https://github.com/evilmartians/lefthook) to catch issues before they reach GitHub.
+
+### On every `git commit` (runs in parallel)
+
+| Check | Command | Catches |
+|:------|:--------|:--------|
+| ESLint | `bun run lint` (client) | Lint errors, unused vars, React hooks violations |
+| TypeScript (client) | `tsc -b --noEmit` | Type errors in frontend |
+| TypeScript (server) | `tsc --noEmit` | Type errors in backend |
+
+### On every `git push` (runs in sequence)
+
+| Check | Command | Catches |
+|:------|:--------|:--------|
+| Unit tests | `npx vitest run` | Component/logic regressions |
+| E2E tests | `npx playwright test` | Full user-flow regressions |
+
+If any check fails the commit or push is blocked with a clear error message.
+
+To skip in an emergency (use rarely):
+```bash
+git commit --no-verify
+git push --no-verify
+```
+
+### Setup (already done — for new contributors)
+
+```bash
+bun install        # installs lefthook
+bunx lefthook install  # registers the git hooks
+```
 
 ---
 
@@ -365,8 +449,8 @@ npx playwright show-report tests/playwright-report
 | 1 | Project Setup & Database | 87% |
 | 2 | Authentication | Complete |
 | 3 | User Management (Admin) | Complete |
-| 4 | Ticket CRUD | In Progress (read + webhook done) |
-| 5 | Comments & History | Not Started |
+| 4 | Ticket CRUD | In Progress (status, category, assignee editing done) |
+| 5 | Comments & History | In Progress |
 | 6 | Dashboard & My Tickets | Not Started |
 | 7 | Polish & Deployment | In Progress |
 

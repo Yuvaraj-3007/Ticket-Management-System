@@ -136,9 +136,15 @@ model Ticket {
 // Comments
 // ──────────────────────────────────────
 
+enum CommentSenderType {
+  AGENT
+  CUSTOMER
+}
+
 model Comment {
-  id      String @id @default(uuid())
-  content String
+  id         String            @id @default(uuid())
+  content    String
+  senderType CommentSenderType @default(AGENT)
 
   ticket   Ticket @relation(fields: [ticketId], references: [id])
   ticketId String

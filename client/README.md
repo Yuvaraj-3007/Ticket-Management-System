@@ -31,10 +31,10 @@ bun run build
 bun run lint
 
 # Unit tests (run once)
-bun run test:components
+npx vitest run
 
 # Unit tests (watch mode)
-bun run test:components:watch
+npx vitest
 ```
 
 ## Project structure
@@ -42,8 +42,14 @@ bun run test:components:watch
 ```
 src/
 ├── components/
-│   ├── Navbar.tsx              # Top navigation bar
-│   └── ui/                     # shadcn/ui components
+│   ├── Navbar.tsx
+│   ├── TicketDetail.tsx         # Ticket header, metadata grid, inline editing
+│   ├── TicketReplies.tsx        # Reply thread + reply form + AI Polish button (no sender dropdown — senderType derived server-side)
+│   ├── EnumSelect.tsx           # Reusable Select for fixed enum options
+│   ├── __tests__/
+│   │   ├── TicketDetail.test.tsx   # 24 tests
+│   │   └── TicketReplies.test.tsx  # 22 tests
+│   └── ui/
 │       ├── badge.tsx
 │       ├── button.tsx
 │       ├── card.tsx
@@ -52,23 +58,25 @@ src/
 │       ├── label.tsx
 │       ├── select.tsx
 │       ├── skeleton.tsx
-│       └── table.tsx
+│       ├── table.tsx
+│       └── textarea.tsx
 ├── lib/
-│   ├── auth-client.ts          # Better Auth client instance
-│   ├── ticket-badges.ts        # Badge variants + label maps for type/priority/status
-│   └── utils.ts                # cn() utility
+│   ├── auth-client.ts
+│   ├── ticket-badges.ts
+│   └── utils.ts
 ├── pages/
 │   ├── __tests__/
-│   │   └── Users.test.tsx      # Vitest unit tests — create user form (12 tests)
+│   │   ├── TicketDetail.test.tsx   # 46 tests (TicketDetailPage page tests)
+│   │   ├── Tickets.test.tsx        # 24 tests
+│   │   └── Users.test.tsx          # 12 tests
 │   ├── Dashboard.tsx
 │   ├── Login.tsx
-│   ├── TicketDetail.tsx        # Single ticket view (route: /tickets/:id)
-│   ├── Tickets.test.tsx        # Vitest unit tests — ticket list
-│   ├── Tickets.tsx             # Paginated, sortable, filterable ticket table
-│   └── Users.tsx               # User management (Admin only)
-├── App.tsx                     # Routes: ProtectedRoute, AdminRoute, GuestRoute
+│   ├── TicketDetailPage.tsx     # Layout shell: Navbar + TicketDetail + TicketReplies
+│   ├── Tickets.tsx
+│   └── Users.tsx
+├── App.tsx
 ├── main.tsx
-└── setupTests.ts               # @testing-library/jest-dom setup
+└── setupTests.ts
 ```
 
 ## Environment variables
@@ -86,4 +94,4 @@ src/
 | `/` | `Dashboard` | ProtectedRoute (redirects to `/login` if not authenticated) |
 | `/users` | `Users` | AdminRoute (redirects to `/` if not admin) |
 | `/tickets` | `Tickets` | ProtectedRoute |
-| `/tickets/:id` | `TicketDetail` | ProtectedRoute |
+| `/tickets/:id` | `TicketDetailPage` | ProtectedRoute |

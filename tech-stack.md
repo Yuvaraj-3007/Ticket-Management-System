@@ -30,9 +30,10 @@
 
 - **`@tms/core`** — internal workspace package
   - User schemas: `createUserSchema`, `editUserSchema`, `apiUserSchema`
-  - Ticket schemas: `apiTicketSchema`, `paginatedTicketsSchema`, `ticketQuerySchema`, `inboundEmailSchema`
-  - Constants: `ROLES`, `USER_ROLES`, `TICKET_TYPE`, `PRIORITY`, `STATUS`, `TICKET_TYPES`, `PRIORITIES`, `STATUSES`, `SORTABLE_COLUMNS`
-  - Types: `UserRole`, `ApiUser`, `ApiTicket`, `PaginatedTickets`, `TicketTypeValue`, `PriorityValue`, `StatusValue`
+  - Ticket schemas: `apiTicketSchema`, `paginatedTicketsSchema`, `ticketQuerySchema`, `inboundEmailSchema`, `assignTicketSchema`, `updateStatusSchema`, `updateTypeSchema`
+  - Comment schemas: `apiCommentSchema`, `createCommentSchema`
+  - Constants: `ROLES`, `USER_ROLES`, `TICKET_TYPE`, `PRIORITY`, `STATUS`, `TICKET_TYPES`, `PRIORITIES`, `STATUSES`, `SORTABLE_COLUMNS`, `COMMENT_SENDER_TYPES`
+  - Types: `UserRole`, `ApiUser`, `ApiTicket`, `PaginatedTickets`, `TicketTypeValue`, `PriorityValue`, `StatusValue`, `ApiComment`, `CreateCommentInput`, `CommentSenderType`, `AssignableUser`
 
 ## Database
 
@@ -59,6 +60,18 @@
 - **Atomic user creation** — `prisma.$transaction` for user + account creation
 - **Password hashing** — `better-auth/crypto` `hashPassword`
 - **Global JSON error handler** — all Express errors returned as JSON (no HTML pages)
+- **Per-user AI rate limiting** — 10 req/min on the polish endpoint, keyed by user ID
+- **Server-side senderType derivation** — clients cannot forge the comment sender type
+- **Session invalidation on password reset** — all existing sessions revoked on password change
+- **Prompt injection mitigation** — structural delimiters used in system prompt to isolate user content
+- **Safe error logging** — `err.message` only; no SDK internals leaked to logs or responses
+- **MOONSHOT_API_KEY startup guard** — server refuses to start in production if the key is missing
+
+## AI / External APIs
+
+- **Kimi (Moonshot AI)** — `moonshot-v1-8k` model via OpenAI-compatible API (`https://api.moonshot.ai/v1`)
+- **Vercel AI SDK** (`ai` + `@ai-sdk/openai-compatible`) — used for structured LLM calls from the server
+- Used for: AI-powered reply polishing on POST /api/tickets/:id/polish
 
 ## Testing
 
@@ -69,7 +82,7 @@
 - **@testing-library/user-event** (v14) — user interaction simulation
 - **@testing-library/jest-dom** (v6) — DOM matchers
 - **jsdom** — browser environment for tests
-- 12 tests covering the create user form (validation, submit, server errors)
+- 128 tests covering Users form, TicketDetail component, TicketReplies component, Tickets page, and TicketDetailPage
 
 ### E2E Tests
 
@@ -77,8 +90,16 @@
 - Separate test database (`ticket_management_test`)
 - Global setup: migrations + admin seed before each run
 - Global teardown: all tables truncated after tests complete
-- 124 tests across authentication (46), user management (9), webhooks (28), tickets (21), ticket detail (19), smoke (1)
+- 158 tests across authentication (46), user management (5), webhooks (28), tickets (21), ticket detail (52), smoke (1)
+- Backend on port 5001, Frontend on port 5175
 - `TEST_BACKEND_URL` in `server/.env` must point to the test backend port (5001) for UI tests to resolve correctly
+
+### Git Hooks
+
+- **Lefthook** — git hooks manager
+  - `pre-commit`: ESLint + TypeScript check (client + server) run in parallel
+  - `pre-push`: Vitest unit tests + Playwright E2E tests run in sequence
+  - Blocks commits/pushes on any failure
 
 ## Deployment (Planned)
 

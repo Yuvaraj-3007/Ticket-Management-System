@@ -75,7 +75,7 @@ export type TicketSort = z.infer<typeof ticketSortSchema>;
 // ──────────────────────────────────────
 
 export const ticketFilterSchema = z.object({
-  search:   z.string().optional(),
+  search:   z.string().max(200, "Search term must be 200 characters or fewer").optional(),
   status:   z.enum(STATUSES).optional(),
   priority: z.enum(PRIORITIES).optional(),
   type:     z.enum(TICKET_TYPES).optional(),
@@ -117,7 +117,45 @@ export const inboundEmailSchema = z.object({
   from:    z.string().email("Must be a valid email address"),
   name:    z.string().optional(),
   subject: z.string().min(1, "Subject is required").max(255, "Subject must be 255 characters or fewer"),
-  body:    z.string().min(1, "Body is required"),
+  body:    z.string().min(1, "Body is required").max(10000, "Body must be 10000 characters or fewer"),
 });
 
 export type InboundEmail = z.infer<typeof inboundEmailSchema>;
+
+// ──────────────────────────────────────
+// Assignable users
+// Slim shape returned by GET /api/tickets/assignable-users
+// Only id + name — no email, role, or other sensitive fields
+// ──────────────────────────────────────
+
+export const assignableUserSchema = z.object({
+  id:   z.string(),
+  name: z.string(),
+});
+export const assignableUsersSchema = z.array(assignableUserSchema);
+export type AssignableUser = z.infer<typeof assignableUserSchema>;
+
+// ──────────────────────────────────────
+// Assign ticket mutation schema
+// Used by PATCH /api/tickets/:id/assignee
+// ──────────────────────────────────────
+
+export const assignTicketSchema = z.object({
+  assignedToId: z.string().uuid("assignedToId must be a valid UUID").nullable(), // null = unassign
+});
+export type AssignTicketInput = z.infer<typeof assignTicketSchema>;
+
+// ──────────────────────────────────────
+// Update status / type mutation schemas
+// Used by PATCH /api/tickets/:id/status and /api/tickets/:id/type
+// ──────────────────────────────────────
+
+export const updateStatusSchema = z.object({
+  status: z.enum(STATUSES),
+});
+export type UpdateStatusInput = z.infer<typeof updateStatusSchema>;
+
+export const updateTypeSchema = z.object({
+  type: z.enum(TICKET_TYPES),
+});
+export type UpdateTypeInput = z.infer<typeof updateTypeSchema>;

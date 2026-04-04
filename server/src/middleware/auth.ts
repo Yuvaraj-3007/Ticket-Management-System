@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { auth } from "../lib/auth.js";
 import { fromNodeHeaders } from "better-auth/node";
+import { ROLES } from "@tms/core";
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   const session = await auth.api.getSession({
@@ -24,7 +25,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
 export async function requireAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
   await requireAuth(req, res, () => {
-    if (req.user?.role !== "ADMIN") {
+    if (req.user?.role !== ROLES.ADMIN) {
       res.status(403).json({ error: "Admin access required" });
       return;
     }

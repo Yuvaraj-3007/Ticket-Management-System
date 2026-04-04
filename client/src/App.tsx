@@ -4,7 +4,7 @@ import { ROLES, type UserRole } from "@tms/core";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
 import Tickets from "@/pages/Tickets";
-import TicketDetail from "@/pages/TicketDetail";
+import TicketDetailPage from "@/pages/TicketDetailPage";
 import Users from "@/pages/Users";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -40,7 +40,7 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />;
   }
 
-  if ((session.user as { role: UserRole }).role !== ROLES.ADMIN) {
+  if ((session.user as unknown as { role: UserRole }).role !== ROLES.ADMIN) {
     return <Navigate to="/" replace />;
   }
 
@@ -97,7 +97,7 @@ function App() {
           path="/tickets/:id"
           element={
             <ProtectedRoute>
-              <TicketDetail />
+              <TicketDetailPage />
             </ProtectedRoute>
           }
         />

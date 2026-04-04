@@ -13,6 +13,21 @@ import { requireWebhookSecret } from "./middleware/webhook.js";
 
 dotenv.config();
 
+// Guard: refuse to start in production without a webhook secret
+if (process.env.NODE_ENV === "production" && !process.env.WEBHOOK_SECRET) {
+  console.error("FATAL: WEBHOOK_SECRET must be set in production. Exiting.");
+  process.exit(1);
+}
+
+// Guard: refuse to start in production without an AI API key
+if (process.env.NODE_ENV === "production" && !process.env.MOONSHOT_API_KEY) {
+  console.error("FATAL: MOONSHOT_API_KEY must be set in production. Exiting.");
+  process.exit(1);
+}
+if (!process.env.MOONSHOT_API_KEY) {
+  console.warn("WARNING: MOONSHOT_API_KEY is not set — AI polish will return 503.");
+}
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 

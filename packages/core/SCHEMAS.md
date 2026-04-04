@@ -10,7 +10,8 @@ packages/core/
 │   ├── index.ts              ← re-exports everything (import from "@tms/core")
 │   └── schemas/
 │       ├── user.ts           ← ROLES, USER_ROLES, user schemas and types
-│       └── ticket.ts         ← ticket constants, schemas, and types
+│       ├── ticket.ts         ← ticket constants, schemas, and types
+│       └── comment.ts        ← comment constants, schemas, and types
 ├── package.json
 └── tsconfig.json
 ```
@@ -58,6 +59,25 @@ packages/core/
 | `PaginatedTickets` | `type` | Inferred from `paginatedTicketsSchema` |
 | `inboundEmailSchema` | Zod schema | Validates `POST /api/webhooks/email` body |
 | `InboundEmail` | `type` | Inferred from `inboundEmailSchema` |
+| `assignTicketSchema` | Zod schema | Validates `PATCH /api/tickets/:id/assignee` body (assignedToId: uuid or null) |
+| `AssignableUser` | `type` | `{ id: string; name: string }` |
+| `assignableUsersSchema` | Zod schema | Array of `AssignableUser` from `GET /api/tickets/assignable-users` |
+| `updateStatusSchema` | Zod schema | Validates `PATCH /api/tickets/:id/status` body |
+| `updateTypeSchema` | Zod schema | Validates `PATCH /api/tickets/:id/type` body |
+
+### Comment (`schemas/comment.ts`)
+
+| Export | Type | Description |
+|:-------|:-----|:------------|
+| `COMMENT_SENDER_TYPES` | `const` tuple | `["AGENT", "CUSTOMER"]` |
+| `CommentSenderType` | `type` | `"AGENT" \| "CUSTOMER"` |
+| `apiCommentSchema` | Zod schema | Validates comment objects from `GET /api/tickets/:id/comments` |
+| `apiCommentsSchema` | Zod schema | Array of `apiCommentSchema` |
+| `ApiComment` | `type` | Inferred from `apiCommentSchema` |
+| `createCommentSchema` | Zod schema | Validates `POST /api/tickets/:id/comments` body (content 1–5000 chars); senderType is derived server-side from the authenticated user's role and is not accepted from the client |
+| `CreateCommentInput` | `type` | Inferred from `createCommentSchema` |
+| `polishReplySchema` | Zod schema | Validates `POST /api/tickets/:id/polish` request body |
+| `PolishReplyInput` | `type` | TypeScript type for polish input |
 
 ## Using ROLES (important)
 

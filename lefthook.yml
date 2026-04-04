@@ -1,0 +1,29 @@
+pre-commit:
+  parallel: true
+  commands:
+    lint-client:
+      root: "client/"
+      run: bun run lint
+      fail_text: "ESLint errors found — fix them before committing"
+
+    typecheck-client:
+      root: "client/"
+      run: bunx tsc -b --noEmit
+      fail_text: "TypeScript errors in client — fix them before committing"
+
+    typecheck-server:
+      root: "server/"
+      run: bunx tsc --noEmit
+      fail_text: "TypeScript errors in server — fix them before committing"
+
+pre-push:
+  parallel: false
+  commands:
+    unit-tests:
+      root: "client/"
+      run: npx vitest run
+      fail_text: "Unit tests failed — all tests must pass before pushing"
+
+    e2e-tests:
+      run: npx playwright test
+      fail_text: "E2E tests failed — all tests must pass before pushing"

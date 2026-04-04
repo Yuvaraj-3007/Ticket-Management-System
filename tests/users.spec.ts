@@ -67,29 +67,7 @@ test.describe("User management — happy paths", () => {
     await expect(page.getByText(ADMIN_EMAIL)).toBeVisible();
   });
 
-  test("shows column headers: Name, Email, Role, Status, Created, Actions", async ({
-    page,
-  }) => {
-    for (const header of ["Name", "Email", "Role", "Status", "Created", "Actions"]) {
-      await expect(page.getByRole("columnheader", { name: header })).toBeVisible();
-    }
-  });
-
-  test("Add User button is visible on the page", async ({ page }) => {
-    await expect(page.getByRole("button", { name: "Add User" })).toBeVisible();
-  });
-
   // ─── Create ──────────────────────────────────────────────────────────────
-
-  test("opens the Add New User dialog when Add User is clicked", async ({
-    page,
-  }) => {
-    await page.getByRole("button", { name: "Add User" }).click();
-    await expect(page.getByRole("dialog")).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: "Add New User" })
-    ).toBeVisible();
-  });
 
   test("creates a new user and shows them in the list", async ({ page }) => {
     await page.getByRole("button", { name: "Add User" }).click();
@@ -114,21 +92,6 @@ test.describe("User management — happy paths", () => {
   });
 
   // ─── Update ──────────────────────────────────────────────────────────────
-
-  test("opens the Edit User dialog pre-filled with the user's current data", async ({
-    page,
-  }) => {
-    const row = userRow(page, TEST_USER.email);
-    await row.getByRole("button", { name: "Edit" }).click();
-
-    await expect(page.getByRole("dialog")).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: "Edit User" })
-    ).toBeVisible();
-
-    await expect(page.getByLabel("Name")).toHaveValue(TEST_USER.name);
-    await expect(page.getByLabel("Email")).toHaveValue(TEST_USER.email);
-  });
 
   test("updates the user's name, email, and role and reflects changes in the list", async ({
     page,

@@ -25,6 +25,7 @@ Rules for tests:
 - Modified behaviour → update existing tests to match
 - Never leave implementation code without test coverage
 - Run the tests and confirm they pass before considering the task done
+- E2E tests cover only what cannot be unit tested: real API calls, database persistence, browser navigation, multi-step user flows. Do not duplicate in E2E what is already asserted by a unit test.
 
 ### What "done" means
 A task is only complete when:
@@ -35,6 +36,84 @@ A task is only complete when:
 
 ---
 
+## Parallel agents — use based on requirement level
+
+Whenever a task has independent subtasks, launch multiple agents in parallel using the Agent tool. Match the number of agents to the complexity:
+
+| Situation | Agents to use |
+|:----------|:--------------|
+| Single file change or simple lookup | No agent — do it directly |
+| 2–3 independent files (e.g. updating separate docs) | 2 agents in parallel |
+| Large feature with independent concerns (e.g. backend + frontend + tests) | 3+ agents in parallel |
+| Research across multiple parts of the codebase | Explore agent |
+
+**Rules:**
+- Never spawn an agent for work you can do in one tool call
+- Never make agents depend on each other unnecessarily — split work so each agent is fully independent
+- Always use a single message with multiple Agent tool calls to run them truly in parallel
+- If one agent's output is needed as input for another, run them sequentially instead
+
+---
+
+## Git — Never commit or push without explicit approval
+
+> Pre-commit and pre-push hooks (Lefthook) run automatically on every commit and push. Do not use `--no-verify` unless the user explicitly asks.
+
+**Never run `git commit` or `git push` (or any variant) unless the user explicitly says to.**
+
+Examples of explicit approval:
+- "commit and push it"
+- "go ahead and commit"
+- "push it"
+
+If you finish implementing a feature or fix, stop after the tests pass. Do not commit, do not push, do not suggest doing so. Wait for the user to give the instruction.
+
+This rule has no exceptions — not even for "minor" changes like docs or config files.
+
+---
+
+
+## Reusable UI components
+
+### `EnumSelect` — `client/src/components/EnumSelect.tsx`
+
+Use this whenever you need a Select dropdown over a fixed set of string values (enums, const arrays).
+It handles the trigger label, item list, disabled state, and inline error message in one place.
+
+```tsx
+import { EnumSelect } from "@/components/EnumSelect";
+
+<EnumSelect
+  value={ticket.status}
+  options={STATUSES}           // readonly string tuple
+  labels={STATUS_LABELS}       // Record<value, display string>
+  onValueChange={(val) => statusMutation.mutate(val)}
+  disabled={statusMutation.isPending}
+  isError={statusMutation.isError}
+  errorMessage="Failed to update status"
+  width="w-[150px]"            // optional, defaults to w-[150px]
+/>
+```
+
+Do **not** inline a raw `<Select>` + items loop for enum fields — use `EnumSelect` instead.
+The Assignee select is exempt because it has a nullable "Unassigned" option with custom rendering.
+
+---
+
+### `TicketReplies` — `client/src/components/TicketReplies.tsx`
+
+Self-contained reply thread + reply form for a ticket detail page.
+Owns the comments query, reply mutation, textarea state, and senderType selection.
+
+```tsx
+import { TicketReplies } from "@/components/TicketReplies";
+
+<TicketReplies ticketId={ticket.ticketId} />
+```
+
+Pass the human-readable `ticketId` (e.g. `"TKT-0001"`), not the DB `id`.
+
+---
 
 ## Role strings
 

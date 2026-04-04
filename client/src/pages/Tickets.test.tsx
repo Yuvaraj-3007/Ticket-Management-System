@@ -182,9 +182,9 @@ describe("Tickets page — component", () => {
     await screen.findByText("TKT-0042");
 
     const rows = screen.getAllByRole("row");
-    const rowTexts = rows.map((r) => r.textContent ?? "");
-    const idx1 = rowTexts.findIndex((t) => t.includes("TKT-0042"));
-    const idx2 = rowTexts.findIndex((t) => t.includes("TKT-0041"));
+    const rowTexts = rows.map((r: HTMLElement) => r.textContent ?? "");
+    const idx1 = rowTexts.findIndex((t: string) => t.includes("TKT-0042"));
+    const idx2 = rowTexts.findIndex((t: string) => t.includes("TKT-0041"));
     expect(idx1).toBeLessThan(idx2);
   });
 

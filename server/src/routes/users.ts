@@ -4,7 +4,7 @@ import { hashPassword } from "better-auth/crypto";
 import { Prisma } from "../generated/prisma/client.js";
 import prisma from "../lib/prisma.js";
 import { requireAdmin } from "../middleware/auth.js";
-import { createUserSchema, editUserSchema } from "@tms/core";
+import { ROLES, createUserSchema, editUserSchema } from "@tms/core";
 
 const router = Router();
 
@@ -59,7 +59,7 @@ router.post("/", async (req: Request, res: Response) => {
           id: userId,
           name,
           email,
-          role: role ?? "AGENT",
+          role: role ?? ROLES.AGENT,
           emailVerified: true,
           isActive: true,
         },
@@ -120,7 +120,7 @@ router.put("/:id", async (req: Request<{ id: string }>, res: Response) => {
     }
 
     // Prevent admin from removing their own admin role
-    if (role && role !== "ADMIN" && req.user.id === existing.id) {
+    if (role && role !== ROLES.ADMIN && req.user.id === existing.id) {
       res.status(400).json({ error: "You cannot remove your own admin role" });
       return;
     }
@@ -149,10 +149,13 @@ router.put("/:id", async (req: Request<{ id: string }>, res: Response) => {
 
     if (password) {
       const hashedPassword = await hashPassword(password);
-      await prisma.account.updateMany({
-        where: { userId: id, providerId: "credential" },
-        data: { password: hashedPassword },
-      });
+      await prisma.$transaction([
+        prisma.account.updateMany({
+          where: { userId: id, providerId: "credential" },
+          data: { password: hashedPassword },
+        }),
+        prisma.session.deleteMany({ where: { userId: id } }),
+      ]);
     }
 
     res.json(user);

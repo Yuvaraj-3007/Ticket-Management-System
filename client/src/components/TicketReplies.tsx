@@ -1,0 +1,138 @@
+import { useState } from "react";
+import axios from "axios";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import {
+  apiCommentsSchema,
+  type ApiComment,
+} from "@tms/core";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+
+const API_URL = import.meta.env.VITE_API_URL || "";
+
+const SENDER_TYPE_LABELS = {
+  AGENT:    "Agent",
+  CUSTOMER: "Customer",
+} as const;
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleString(undefined, {
+    year: "numeric", month: "short", day: "numeric",
+    hour: "numeric", minute: "2-digit",
+  });
+}
+
+interface TicketRepliesProps {
+  ticketId: string;
+}
+
+/**
+ * Self-contained reply thread + form for a single ticket.
+ * Handles the comments query, reply mutation, and all local state.
+ * Used on the TicketDetail page below the description section.
+ */
+function TicketReplies({ ticketId }: TicketRepliesProps) {
+  const queryClient = useQueryClient();
+  const [content, setContent] = useState("");
+
+  const { data: comments = [], isLoading } = useQuery<ApiComment[]>({
+    queryKey: ["comments", ticketId],
+    queryFn: async () => {
+      const res = await axios.get(`${API_URL}/api/tickets/${ticketId}/comments`, { withCredentials: true });
+      return apiCommentsSchema.parse(res.data);
+    },
+    enabled: !!ticketId,
+  });
+
+  const replyMutation = useMutation({
+    mutationFn: (content: string) =>
+      axios.post(`${API_URL}/api/tickets/${ticketId}/comments`, { content }, { withCredentials: true }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["comments", ticketId] });
+      setContent("");
+    },
+  });
+
+  const polishMutation = useMutation({
+    mutationFn: (content: string) =>
+      axios.post<{ polished: string }>(
+        `${API_URL}/api/tickets/${ticketId}/polish`,
+        { content },
+        { withCredentials: true },
+      ),
+    onSuccess: (res) => setContent(res.data.polished),
+  });
+
+  return (
+    <div>
+      <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-3">
+        Replies{comments.length > 0 && ` (${comments.length})`}
+      </h3>
+
+      {isLoading && <Skeleton className="h-20 w-full" />}
+
+      {!isLoading && comments.length === 0 && (
+        <p className="text-sm text-muted-foreground italic">No replies yet.</p>
+      )}
+
+      {!isLoading && comments.length > 0 && (
+        <div className="space-y-3 mb-4">
+          {comments.map((c) => (
+            <div
+              key={c.id}
+              className={`border rounded-lg p-4 ${c.senderType === "CUSTOMER" ? "bg-blue-50/50 dark:bg-blue-950/20" : "bg-muted/10"}`}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-sm font-semibold">{c.author.name}</span>
+                <Badge variant="outline" className="text-xs py-0">
+                  {SENDER_TYPE_LABELS[c.senderType]}
+                </Badge>
+                <span className="text-xs text-muted-foreground">{formatDate(c.createdAt)}</span>
+              </div>
+              <p className="text-sm whitespace-pre-wrap">{c.content}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Reply form */}
+      <div className="space-y-2 mt-6">
+        <h3 className="text-sm font-medium mb-2">Add Reply</h3>
+        <Textarea
+          placeholder="Write a reply…"
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          rows={3}
+          disabled={replyMutation.isPending}
+        />
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => polishMutation.mutate(content)}
+            disabled={polishMutation.isPending || content.trim() === ""}
+          >
+            {polishMutation.isPending ? "Polishing…" : "✨ Polish"}
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => replyMutation.mutate(content)}
+            disabled={replyMutation.isPending || content.trim() === ""}
+          >
+            {replyMutation.isPending ? "Posting…" : "Post Reply"}
+          </Button>
+        </div>
+        {replyMutation.isError && (
+          <p className="text-xs text-destructive">Failed to post reply. Please try again.</p>
+        )}
+        {polishMutation.isError && (
+          <p className="text-xs text-destructive">Failed to polish reply. Please try again.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export { TicketReplies };

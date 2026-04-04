@@ -297,7 +297,7 @@ function Tickets() {
             onChange={(e) => setSearchInput(e.target.value)}
             className="h-9 w-56"
           />
-          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v === "all" ? "" : v as StatusValue)}>
+          <Select value={statusFilter} onValueChange={(v) => setStatusFilter((v as string) === "all" ? "" : v as StatusValue)}>
             <SelectTrigger className="h-9 w-36">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
@@ -308,7 +308,7 @@ function Tickets() {
               ))}
             </SelectContent>
           </Select>
-          <Select value={priorityFilter} onValueChange={(v) => setPriorityFilter(v === "all" ? "" : v as PriorityValue)}>
+          <Select value={priorityFilter} onValueChange={(v) => setPriorityFilter((v as string) === "all" ? "" : v as PriorityValue)}>
             <SelectTrigger className="h-9 w-36">
               <SelectValue placeholder="Priority" />
             </SelectTrigger>
@@ -319,7 +319,7 @@ function Tickets() {
               ))}
             </SelectContent>
           </Select>
-          <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v === "all" ? "" : v as TicketTypeValue)}>
+          <Select value={typeFilter} onValueChange={(v) => setTypeFilter((v as string) === "all" ? "" : v as TicketTypeValue)}>
             <SelectTrigger className="h-9 w-36">
               <SelectValue placeholder="Category" />
             </SelectTrigger>
