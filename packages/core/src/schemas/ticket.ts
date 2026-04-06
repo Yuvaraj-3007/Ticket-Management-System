@@ -50,6 +50,8 @@ export const apiTicketSchema = z.object({
   priority:    z.enum(PRIORITIES),
   status:      z.enum(STATUSES),
   project:     z.string(),
+  senderName:  z.string().nullable().optional(),
+  senderEmail: z.string().nullable().optional(),
   assignedTo:  z.object({ id: z.string(), name: z.string() }).nullable(),
   createdBy:   z.object({ id: z.string(), name: z.string() }),
   createdAt:   z.string(),

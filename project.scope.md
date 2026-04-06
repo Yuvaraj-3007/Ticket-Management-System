@@ -175,17 +175,20 @@ Build a **centralized Ticket Management System** that captures, tracks, assigns,
 
 ## 9a. Actual Tech Stack (Phase 1 Implementation)
 
-| Layer     | Technology                                          |
-| --------- | --------------------------------------------------- |
-| Runtime   | Bun                                                 |
-| Frontend  | React 19 + TypeScript + Vite 8 + Tailwind CSS v4    |
-| Backend   | Express.js 5 + TypeScript                           |
-| Database  | PostgreSQL 17                                       |
-| ORM       | Prisma 7 with `@prisma/adapter-pg`                  |
-| Auth      | Better Auth 1.5 (email/password, database sessions) |
-| Shared    | `@tms/core` workspace package (Zod schemas, ROLES)  |
-| Testing   | Playwright (E2E, 124 tests) + Vitest (unit, 12 tests)|
-| Hosting   | Docker + Coolify (self-hosted, planned)             |
+| Layer     | Technology                                                                 |
+| --------- | -------------------------------------------------------------------------- |
+| Runtime   | Bun                                                                        |
+| Frontend  | React 19 + TypeScript + Vite 8 + Tailwind CSS v4 + shadcn/ui (Base UI)    |
+| Charts    | Recharts (Dashboard bar chart)                                             |
+| Backend   | Express.js 5 + TypeScript                                                  |
+| Database  | PostgreSQL 17                                                              |
+| ORM       | Prisma 7 with `@prisma/adapter-pg`                                         |
+| Auth      | Better Auth 1.5 (email/password, database sessions)                        |
+| AI        | Kimi (Moonshot AI) via Vercel AI SDK — polish, summarize, classify, auto-resolve |
+| Job Queue | pg-boss v12 — classify-ticket + auto-resolve-ticket workers                |
+| Shared    | `@tms/core` workspace package (Zod schemas, ROLES)                         |
+| Testing   | Playwright (E2E, 158 tests) + Vitest (unit, 128 tests)                     |
+| Hosting   | Docker + Coolify (self-hosted, planned)                                    |
 
 ---
 

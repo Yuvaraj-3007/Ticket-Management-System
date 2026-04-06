@@ -47,15 +47,25 @@ src/
 ├── middleware/
 │   ├── auth.ts              # requireAuth + requireAdmin middleware
 │   └── webhook.ts           # requireWebhookSecret middleware
+├── lib/
+│   ├── auth.ts              # Better Auth configuration
+│   ├── prisma.ts            # Prisma client with @prisma/adapter-pg
+│   └── boss.ts              # pg-boss singleton (job queue)
+├── middleware/
+│   ├── auth.ts              # requireAuth + requireAdmin middleware
+│   └── webhook.ts           # requireWebhookSecret middleware
 ├── routes/
 │   ├── users.ts             # GET/POST/PUT/PATCH /api/users
-│   ├── tickets.ts           # GET/PATCH /api/tickets, GET/POST /api/tickets/:id/comments
+│   ├── tickets.ts           # GET/PATCH /api/tickets, GET /api/tickets/stats, comments, polish, summarize
 │   └── webhooks.ts          # POST /api/webhooks/email
+├── workers/
+│   ├── classify.ts          # pg-boss classify-ticket worker
+│   └── auto-resolve.ts      # pg-boss auto-resolve-ticket worker
 └── index.ts                 # Express app, rate limiting, HTTP server
 prisma/
 ├── schema.prisma            # Database schema
 ├── migrations/              # SQL migration files
-└── seed.ts                  # Seeds default admin user
+└── seed.ts                  # Seeds default admin + AI agent (ai@system.internal)
 ```
 
 ## Environment variables
@@ -89,6 +99,7 @@ Copy `.env.example` to `.env` to get started.
 | `PUT` | `/api/users/:id` | Admin | Update user |
 | `PATCH` | `/api/users/:id/status` | Admin | Toggle active status |
 | `GET` | `/api/tickets` | Session | List tickets (sort/filter/paginate via query params) |
+| `GET` | `/api/tickets/stats` | Session | Dashboard statistics (total, open, aiResolved, aiResolvedPercent, avgResolutionTimeMs, dailyCounts) |
 | `GET` | `/api/tickets/:id` | Session | Get single ticket by ticketId (e.g. `TKT-0001`) |
 | `GET` | `/api/tickets/assignable-users` | Session | Active users available for assignment |
 | `PATCH` | `/api/tickets/:id/assignee` | Session | Assign or unassign a ticket |
@@ -104,7 +115,14 @@ Copy `.env.example` to `.env` to get started.
 - **Polish endpoint rate limit**: `POST /api/tickets/:id/polish` is subject to a per-user rate limit of 10 requests per minute, keyed by user ID, to prevent abuse of the external Moonshot AI API.
 - **senderType**: The `senderType` field on comments is derived server-side from the authenticated user's session role. It is never accepted from client input.
 - **Session invalidation**: Sessions are invalidated on password reset, ensuring old tokens cannot be reused after a credential change.
+- **Prompt injection mitigation**: All AI prompts (auto-resolve, polish, summarize) use XML delimiters (`<system>`, `<context>`, `<draft>`) to structurally isolate user-supplied content. Any `</draft>` tag in client-submitted draft text is stripped before the AI call. The summarize endpoint caps the comment thread at 6 000 characters to prevent context-stuffing attacks.
 - **MOONSHOT_API_KEY startup guard**: The server will refuse to start in production if `MOONSHOT_API_KEY` is not set, preventing silent failures on the polish endpoint.
+
+## Webhook & AI agent behavior
+
+- `POST /api/webhooks/email` creates a ticket with `status: NEW` and assigns it to the AI agent user (`ai@system.internal`, role `AGENT`, no password/login).
+- The `auto-resolve-ticket` pg-boss worker checks `server/knowledge-base.md`. If the issue is covered: posts an AI reply and sets `status: RESOLVED` (unassigns — `assignedToId: null`). If not covered: sets `status: OPEN` (unassigns) so a human agent picks it up.
+- `RESOLVED` tickets are hidden from the ticket list and shown only in dashboard stats.
 
 ## Notes
 

@@ -13,6 +13,7 @@
 - **React Router DOM** (v7) — client-side routing with ProtectedRoute, AdminRoute, GuestRoute
 - **TanStack Query** (v5) — server state, caching, mutations
 - **TanStack Table** (v8) — headless table with `manualSorting` and `manualPagination`
+- **Recharts** — composable chart library; used for the 30-day bar chart on the Dashboard
 - **React Hook Form** (v7) — form state management
 - **Zod** (v4) — schema validation
 - **Vite** (v8) — build tool and dev server
@@ -63,7 +64,7 @@
 - **Per-user AI rate limiting** — 10 req/min on the polish endpoint, keyed by user ID
 - **Server-side senderType derivation** — clients cannot forge the comment sender type
 - **Session invalidation on password reset** — all existing sessions revoked on password change
-- **Prompt injection mitigation** — structural delimiters used in system prompt to isolate user content
+- **Prompt injection mitigation** — XML delimiters (`<system>`, `<context>`, `<draft>`) isolate user-supplied content in auto-resolve, polish, and summarize prompts; `</draft>` tags from client input are stripped before AI calls; summarize thread capped at 6 000 chars
 - **Safe error logging** — `err.message` only; no SDK internals leaked to logs or responses
 - **MOONSHOT_API_KEY startup guard** — server refuses to start in production if the key is missing
 
@@ -71,7 +72,7 @@
 
 - **pg-boss** (v12) — PostgreSQL-backed job queue for background workers
   - `classify-ticket` queue — classifies ticket type and priority via Kimi AI
-  - `auto-resolve-ticket` queue — checks knowledge base and auto-resolves tickets; sets status to PROCESSING during AI call, then RESOLVED (AI reply posted) or OPEN (needs agent)
+  - `auto-resolve-ticket` queue — checks knowledge base and auto-resolves tickets; assigns to AI agent (`ai@system.internal`) while processing, sets status to RESOLVED (AI reply posted, unassigns) or OPEN (needs agent, unassigns)
   - Singleton instance at `server/src/lib/boss.ts`
   - Workers registered at startup in `server/src/workers/classify.ts` and `server/src/workers/auto-resolve.ts`
 
@@ -94,7 +95,7 @@
 - **@testing-library/user-event** (v14) — user interaction simulation
 - **@testing-library/jest-dom** (v6) — DOM matchers
 - **jsdom** — browser environment for tests
-- 128 tests covering Users form, TicketDetail component, TicketReplies component, Tickets page, and TicketDetailPage
+- 128+ tests covering Users form, TicketDetail component, TicketReplies component, Tickets page, and TicketDetailPage
 
 ### E2E Tests
 

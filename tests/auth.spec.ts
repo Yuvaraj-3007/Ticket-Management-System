@@ -410,7 +410,7 @@ test.describe("Navbar displays authenticated user info", () => {
   test("admin's name is displayed in the navbar", async ({ page }) => {
     await loginAsAdmin(page);
     // The seed creates the admin with name "Admin"
-    await expect(page.getByText("Admin")).toBeVisible();
+    await expect(page.getByText("Admin", { exact: true })).toBeVisible();
   });
 });
 
@@ -454,7 +454,7 @@ test.describe("Edge cases and security inputs", () => {
     await page.getByLabel("Email").blur();
     await expect(page).toHaveURL("/login");
     // Script tag must not execute — page title must remain normal
-    await expect(page).toHaveTitle(/client/i);
+    await expect(page).toHaveTitle(/Right Tracker/i);
   });
 
   test("XSS payload in password field does not cause script execution", async ({
@@ -467,7 +467,7 @@ test.describe("Edge cases and security inputs", () => {
     );
     await expect(page).toHaveURL("/login");
     // Verify the page title is unchanged — no XSS took effect
-    await expect(page).toHaveTitle(/client/i);
+    await expect(page).toHaveTitle(/Right Tracker/i);
   });
 
   test("very long email input is handled gracefully", async ({ page }) => {
@@ -477,7 +477,7 @@ test.describe("Edge cases and security inputs", () => {
     await fillAndSubmitLogin(page, longEmail, "SomePassword1");
     await expect(page).toHaveURL("/login");
     // Should not crash — either a validation or server error is acceptable
-    await expect(page).toHaveTitle(/client/i);
+    await expect(page).toHaveTitle(/Right Tracker/i);
   });
 
   test("very long password input is handled gracefully", async ({ page }) => {
@@ -486,7 +486,7 @@ test.describe("Edge cases and security inputs", () => {
     await fillAndSubmitLogin(page, "admin@wisright.com", longPassword);
     await expect(page).toHaveURL("/login");
     // Should stay on login — not crash. Server may return various error messages.
-    await expect(page).toHaveTitle(/client/i);
+    await expect(page).toHaveTitle(/Right Tracker/i);
   });
 
   test("password at exactly the minimum length (8 chars) passes client validation", async ({
@@ -539,7 +539,7 @@ test.describe("Edge cases and security inputs", () => {
     // Zod email validation will reject IDN addresses — no crash expected
     // (If the browser normalises the address and zod accepts it, that is
     //  also acceptable behaviour — the key requirement is no unhandled error)
-    await expect(page).toHaveTitle(/client/i);
+    await expect(page).toHaveTitle(/Right Tracker/i);
   });
 
   test("sign-up attempt via API is rejected (signup disabled)", async ({

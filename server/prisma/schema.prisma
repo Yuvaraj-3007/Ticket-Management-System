@@ -117,6 +117,8 @@ model Ticket {
   priority    Priority   @default(MEDIUM)
   status      Status     @default(NEW)
   project     String
+  senderName  String?
+  senderEmail String?
 
   assignedTo   User?   @relation("AssignedTickets", fields: [assignedToId], references: [id])
   assignedToId String?

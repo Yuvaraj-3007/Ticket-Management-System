@@ -3,6 +3,7 @@ import axios from "axios";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
   apiCommentsSchema,
+  apiTicketSchema,
   type ApiComment,
 } from "@tms/core";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +37,17 @@ interface TicketRepliesProps {
 function TicketReplies({ ticketId }: TicketRepliesProps) {
   const queryClient = useQueryClient();
   const [content, setContent] = useState("");
+
+  // Re-uses the cache populated by TicketDetail — no extra network request
+  const { data: ticket } = useQuery({
+    queryKey: ["ticket", ticketId],
+    queryFn: async () => {
+      const res = await axios.get(`${API_URL}/api/tickets/${ticketId}`, { withCredentials: true });
+      return apiTicketSchema.parse(res.data);
+    },
+    enabled: !!ticketId,
+    staleTime: 60_000,
+  });
 
   const { data: comments = [], isLoading } = useQuery<ApiComment[]>({
     queryKey: ["comments", ticketId],
@@ -71,31 +83,42 @@ function TicketReplies({ ticketId }: TicketRepliesProps) {
         Replies{comments.length > 0 && ` (${comments.length})`}
       </h3>
 
-      {isLoading && <Skeleton className="h-20 w-full" />}
-
-      {!isLoading && comments.length === 0 && (
-        <p className="text-sm text-muted-foreground italic">No replies yet.</p>
-      )}
-
-      {!isLoading && comments.length > 0 && (
-        <div className="space-y-3 mb-4">
-          {comments.map((c) => (
-            <div
-              key={c.id}
-              className={`border rounded-lg p-4 ${c.senderType === "CUSTOMER" ? "bg-blue-50/50 dark:bg-blue-950/20" : "bg-muted/10"}`}
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-sm font-semibold">{c.author.name}</span>
-                <Badge variant="outline" className="text-xs py-0">
-                  {SENDER_TYPE_LABELS[c.senderType]}
-                </Badge>
-                <span className="text-xs text-muted-foreground">{formatDate(c.createdAt)}</span>
-              </div>
-              <p className="text-sm whitespace-pre-wrap">{c.content}</p>
+      <div className="space-y-3 mb-4">
+        {/* Original customer message — always first */}
+        {ticket ? (
+          <div className="border rounded-lg p-4 bg-blue-50/50 dark:bg-blue-950/20">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-sm font-semibold">
+                {ticket.senderName ?? ticket.createdBy.name}
+              </span>
+              <Badge variant="outline" className="text-xs py-0">Customer</Badge>
+              <span className="text-xs text-muted-foreground">{formatDate(ticket.createdAt)}</span>
             </div>
-          ))}
-        </div>
-      )}
+            <p className="text-sm whitespace-pre-wrap">{ticket.description}</p>
+          </div>
+        ) : (
+          <Skeleton className="h-20 w-full" />
+        )}
+
+        {/* Agent / subsequent replies */}
+        {isLoading && <Skeleton className="h-16 w-full" />}
+
+        {!isLoading && comments.map((c) => (
+          <div
+            key={c.id}
+            className={`border rounded-lg p-4 ${c.senderType === "CUSTOMER" ? "bg-blue-50/50 dark:bg-blue-950/20" : "bg-muted/10"}`}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-sm font-semibold">{c.author.name}</span>
+              <Badge variant="outline" className="text-xs py-0">
+                {SENDER_TYPE_LABELS[c.senderType]}
+              </Badge>
+              <span className="text-xs text-muted-foreground">{formatDate(c.createdAt)}</span>
+            </div>
+            <p className="text-sm whitespace-pre-wrap">{c.content}</p>
+          </div>
+        ))}
+      </div>
 
       {/* Reply form */}
       <div className="space-y-2 mt-6">

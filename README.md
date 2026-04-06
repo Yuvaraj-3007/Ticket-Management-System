@@ -48,7 +48,9 @@ Ticket Management System is a full-stack application designed to replace fragmen
 - **Ticket Detail** — Inline editing of status, category, and assignee directly on the detail page
 - **Reply Thread** — Comments on tickets with Agent/Customer sender type distinction
 - **AI-powered reply polishing** — Kimi/Moonshot API rewrites agent replies for clarity and professionalism
-- **Security** — Helmet headers, CORS restrictions, rate limiting, Zod input validation, prompt injection mitigation
+- **AI auto-resolution** — new tickets are assigned to an AI agent (`ai@system.internal`) and automatically resolved via a pg-boss worker if the knowledge base covers the issue
+- **Dashboard metrics** — live stat cards (total, open, AI-resolved %, avg resolution time) and a 30-day bar chart via `GET /api/tickets/stats`
+- **Security** — Helmet headers, CORS restrictions, rate limiting, Zod input validation, XML-delimited prompt injection mitigations, `</draft>` stripping in polish, 6 000-char thread cap in summarize
 - **Shared Schemas** — `@tms/core` workspace package shares Zod schemas and constants between client and server
 
 ---
@@ -68,6 +70,7 @@ Ticket Management System is a full-stack application designed to replace fragmen
 | **Auth** | Better Auth 1.5 (email/password, database sessions) |
 | **Security** | Helmet, express-rate-limit, CORS |
 | **Tables** | TanStack Table v8 (manualSorting + manualPagination) |
+| **Charts** | Recharts — bar chart on Dashboard |
 | **Shared** | `@tms/core` workspace package (Zod schemas, ROLES/ticket constants) |
 | **Unit Tests** | Vitest 4 + Testing Library |
 | **E2E Tests** | Playwright |
@@ -118,12 +121,14 @@ Ticket-Management-System/
 ├── server/                        # Express.js backend
 │   ├── src/
 │   │   ├── routes/                # users.ts, tickets.ts, webhooks.ts
-│   │   ├── lib/                   # Auth config, Prisma client
-│   │   └── middleware/            # Auth & admin middleware
+│   │   ├── lib/                   # Auth config, Prisma client, boss.ts (pg-boss singleton)
+│   │   ├── middleware/            # Auth & admin middleware
+│   │   └── workers/               # classify.ts, auto-resolve.ts (pg-boss workers)
 │   ├── prisma/
 │   │   ├── schema.prisma          # Database schema
 │   │   ├── migrations/            # SQL migrations
-│   │   └── seed.ts                # Default admin seed
+│   │   └── seed.ts                # Seeds admin + AI agent (ai@system.internal)
+│   └── knowledge-base.md          # Q&A entries used by auto-resolve AI worker
 │   ├── .env.example
 │   └── package.json
 ├── packages/
@@ -251,6 +256,7 @@ Open [http://localhost:5173](http://localhost:5173) to access the application.
 | Method | Endpoint | Description |
 |:-------|:---------|:------------|
 | `GET` | `/api/tickets` | List tickets (sort, filter, paginate via query params) |
+| `GET` | `/api/tickets/stats` | Dashboard statistics: total, open, aiResolved, aiResolvedPercent, avgResolutionTimeMs, dailyCounts (30-day array) |
 | `GET` | `/api/tickets/:id` | Get a single ticket by ticketId (e.g. `TKT-0001`) |
 | `GET` | `/api/tickets/assignable-users` | Active users available for assignment |
 | `PATCH` | `/api/tickets/:id/assignee` | Assign or unassign a ticket |
@@ -309,7 +315,9 @@ A security audit was completed on 2026-04-04. All identified issues (Critical, H
 | **Per-user AI rate limiting** | AI polish endpoint capped at 10 requests/minute per user |
 | **Server-side senderType** | `senderType` is derived from session on the server — clients cannot forge the sender |
 | **Session invalidation on password reset** | All existing sessions are destroyed when a user's password is changed |
-| **Prompt injection mitigation** | Structural delimiters separate system prompt from user-supplied content |
+| **Prompt injection mitigation** | XML delimiters (`<system>`, `<context>`, `<draft>`) isolate user-supplied content in auto-resolve, polish, and summarize prompts |
+| **`</draft>` stripping in polish** | Any `</draft>` tag injected by the client is stripped before the AI call |
+| **6 000-char thread cap in summarize** | Comment thread is truncated to 6 000 chars to prevent context-stuffing attacks |
 | **MOONSHOT_API_KEY guard** | Server refuses to start in production if `MOONSHOT_API_KEY` is missing |
 | **Safe error logging** | SDK/AI errors are sanitised before logging — no internal stack traces leaked to clients |
 | **Helmet + CORS** | Security headers and origin restrictions on every response |
@@ -446,13 +454,15 @@ bunx lefthook install  # registers the git hooks
 
 | Phase | Description | Status |
 |:------|:------------|:-------|
-| 1 | Project Setup & Database | 87% |
+| 1 | Project Setup & Database | Complete |
 | 2 | Authentication | Complete |
 | 3 | User Management (Admin) | Complete |
-| 4 | Ticket CRUD | In Progress (status, category, assignee editing done) |
-| 5 | Comments & History | In Progress |
-| 6 | Dashboard & My Tickets | Not Started |
-| 7 | Polish & Deployment | In Progress |
+| 4 | Ticket CRUD | Complete (status, category, assignee editing done) |
+| 5 | Comments & History | Complete |
+| 6 | Dashboard | Complete (stat cards + 30-day bar chart via Recharts) |
+| 7 | AI Features | Complete (polish, summarize, classify, auto-resolve) |
+| 8 | Security Hardening | Complete |
+| 9 | Polish & Deployment | In Progress |
 
 See [implementation-plan.md](implementation-plan.md) for the detailed task breakdown.
 

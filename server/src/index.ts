@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/node";
 import http from "http";
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
@@ -16,6 +17,25 @@ import { registerAutoResolveWorker } from "./workers/auto-resolve.js";
 
 dotenv.config();
 
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  enabled: !!process.env.SENTRY_DSN,
+  environment: process.env.NODE_ENV ?? "development",
+  beforeSend(event) {
+    if (event.request?.data && typeof event.request.data === "object") {
+      const data = event.request.data as Record<string, unknown>;
+      for (const key of ["password", "token", "secret", "apiKey", "api_key"]) {
+        delete data[key];
+      }
+    }
+    return event;
+  },
+});
+
+if (process.env.NODE_ENV === "production" && !process.env.SENTRY_DSN) {
+  console.warn("WARNING: SENTRY_DSN is not set — error reporting to Sentry is disabled.");
+}
+
 // Guard: refuse to start in production without a webhook secret
 if (process.env.NODE_ENV === "production" && !process.env.WEBHOOK_SECRET) {
   console.error("FATAL: WEBHOOK_SECRET must be set in production. Exiting.");
@@ -29,6 +49,9 @@ if (process.env.NODE_ENV === "production" && !process.env.MOONSHOT_API_KEY) {
 }
 if (!process.env.MOONSHOT_API_KEY) {
   console.warn("WARNING: MOONSHOT_API_KEY is not set — AI polish will return 503.");
+}
+if (!process.env.CLOUDMAILIN_SMTP_HOST) {
+  console.warn("WARNING: CLOUDMAILIN_SMTP_* vars not set — outbound reply emails will be skipped.");
 }
 
 const app = express();
@@ -68,7 +91,16 @@ app.get("/api/health", (_req, res) => {
 // API routes
 app.use("/api/users", userRoutes);
 app.use("/api/tickets", ticketRoutes);
-app.use("/api/webhooks", requireWebhookSecret, webhookRoutes);
+const webhookLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: isProd ? 20 : 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many webhook requests. Please try again later." },
+});
+app.use("/api/webhooks", webhookLimiter, requireWebhookSecret, webhookRoutes);
+
+Sentry.setupExpressErrorHandler(app);
 
 // Global error handler — converts Express HTML error pages to JSON
 // Must be registered after all routes
@@ -96,7 +128,10 @@ const server = http.createServer((req, res) => {
 // Start pg-boss and register workers (skip in test — prevents classify worker
 // from overwriting ticket fields that E2E tests set, causing race conditions)
 if (process.env.NODE_ENV !== "test") {
-  boss.on("error", (err) => console.error("[boss] error:", err));
+  boss.on("error", (err) => {
+    console.error("[boss] error:", err);
+    Sentry.captureException(err, { tags: { source: "pg-boss" } });
+  });
   boss.start()
     .then(() => Promise.all([registerClassifyWorker(), registerAutoResolveWorker()]))
     .then(() => console.log("[boss] Workers registered"))
