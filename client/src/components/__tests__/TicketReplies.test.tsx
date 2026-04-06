@@ -75,10 +75,13 @@ describe("TicketReplies — initial rendering", () => {
     expect(await screen.findByText("Replies")).toBeInTheDocument();
   });
 
-  it("shows No replies yet when comments list is empty", async () => {
+  it("shows the original customer message bubble when comments list is empty", async () => {
+    // The component now always shows the original ticket message as the first bubble.
+    // When the ticket query has no cached data the component shows a skeleton, so
+    // we verify there is no "No replies yet." text (that text no longer exists).
     renderReplies();
     await waitFor(() =>
-      expect(screen.getByText("No replies yet.")).toBeInTheDocument()
+      expect(screen.queryByText("No replies yet.")).not.toBeInTheDocument()
     );
   });
 

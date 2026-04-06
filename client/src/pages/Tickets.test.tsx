@@ -89,32 +89,54 @@ describe("Tickets page — component", () => {
 
   // ─── Page structure ────────────────────────────────────────────────────────
 
-  it("renders the Tickets heading", async () => {
+  it("renders the All Tickets heading", async () => {
     await resolveWithTickets([TICKET_1]);
     renderTickets();
-    expect(await screen.findByRole("heading", { name: "Tickets" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "All Tickets" })).toBeInTheDocument();
   });
 
   it("shows all expected column headers", async () => {
     await resolveWithTickets([TICKET_1]);
     renderTickets();
-    await screen.findByRole("heading", { name: "Tickets" });
+    await screen.findByRole("heading", { name: "All Tickets" });
 
-    for (const header of ["Subject", "Sender", "Status", "Category", "Created"]) {
+    for (const header of ["ID", "Subject", "Sender", "Status", "Category", "Priority", "Date"]) {
       expect(screen.getByRole("columnheader", { name: header })).toBeInTheDocument();
     }
   });
 
-  it("shows the ticket count subtitle — singular", async () => {
+  it("shows the ticket count in the stats chip — singular", async () => {
     await resolveWithTickets([TICKET_1]);
     renderTickets();
-    expect(await screen.findByText(/1 ticket.*newest first/i)).toBeInTheDocument();
+    // The stats chip shows the count as a number and "total tickets" label
+    expect(await screen.findByText("1")).toBeInTheDocument();
+    expect(await screen.findByText(/total tickets/i)).toBeInTheDocument();
   });
 
-  it("shows the ticket count subtitle — plural", async () => {
+  it("shows the ticket count in the stats chip — plural", async () => {
     await resolveWithTickets([TICKET_1, TICKET_2]);
     renderTickets();
-    expect(await screen.findByText(/2 tickets.*newest first/i)).toBeInTheDocument();
+    expect(await screen.findByText("2")).toBeInTheDocument();
+    expect(await screen.findByText(/total tickets/i)).toBeInTheDocument();
+  });
+
+  it("shows both the ID and Priority columns", async () => {
+    await resolveWithTickets([TICKET_1]);
+    renderTickets();
+    await screen.findByRole("heading", { name: "All Tickets" });
+
+    expect(screen.getByRole("columnheader", { name: "ID" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Priority" })).toBeInTheDocument();
+  });
+
+  it("ticket count in stats chip matches the number of rendered rows", async () => {
+    await resolveWithTickets([TICKET_1, TICKET_2]);
+    renderTickets();
+    await screen.findByText("2");
+
+    const rows = screen.getAllByRole("row");
+    const dataRows = rows.length - 1; // exclude header
+    expect(dataRows).toBe(2);
   });
 
   // ─── Ticket data rendering ─────────────────────────────────────────────────
@@ -157,25 +179,6 @@ describe("Tickets page — component", () => {
     await screen.findByText("Dashboard crashes on login");
     const row = screen.getByRole("row", { name: /Dashboard crashes on login/i });
     expect(within(row).getByText("Open")).toBeInTheDocument();
-  });
-
-  it("does not show the ID or Priority columns", async () => {
-    await resolveWithTickets([TICKET_1]);
-    renderTickets();
-    await screen.findByRole("heading", { name: "Tickets" });
-
-    expect(screen.queryByRole("columnheader", { name: "ID" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("columnheader", { name: "Priority" })).not.toBeInTheDocument();
-  });
-
-  it("ticket count in subtitle matches the number of rendered rows", async () => {
-    await resolveWithTickets([TICKET_1, TICKET_2]);
-    renderTickets();
-    await screen.findByText(/2 tickets/i);
-
-    const rows = screen.getAllByRole("row");
-    const dataRows = rows.length - 1; // exclude header
-    expect(dataRows).toBe(2);
   });
 
   // ─── Ordering ─────────────────────────────────────────────────────────────
@@ -234,9 +237,9 @@ describe("Tickets page — sorting", () => {
     );
   });
 
-  it("shows 'newest first' subtitle by default", async () => {
+  it("stats chip shows 'total tickets' label by default (no filters active)", async () => {
     renderTickets();
-    expect(await screen.findByText(/newest first/i)).toBeInTheDocument();
+    expect(await screen.findByText(/total tickets/i)).toBeInTheDocument();
   });
 
   it("clicking Status column sends sortBy=status&sortOrder=asc", async () => {
@@ -274,25 +277,11 @@ describe("Tickets page — sorting", () => {
     });
   });
 
-  it("subtitle updates to 'sorted by status (A→Z)' after clicking Status", async () => {
+  it("Status column header gains cursor-pointer after sorting is enabled", async () => {
     renderTickets();
     await screen.findByText("Dashboard crashes on login");
 
-    await userEvent.click(screen.getByRole("columnheader", { name: "Status" }));
-
-    expect(await screen.findByText(/sorted by status.*A→Z/)).toBeInTheDocument();
-  });
-
-  it("subtitle updates to 'sorted by status (Z→A)' after clicking Status twice", async () => {
-    renderTickets();
-    await screen.findByText("Dashboard crashes on login");
-
-    await userEvent.click(screen.getByRole("columnheader", { name: "Status" }));
-    await screen.findByText(/A→Z/);
-
-    await userEvent.click(screen.getByRole("columnheader", { name: "Status" }));
-
-    expect(await screen.findByText(/Z→A/)).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Status" })).toHaveClass("cursor-pointer");
   });
 
   it("Subject column header has no cursor-pointer (sorting disabled)", async () => {

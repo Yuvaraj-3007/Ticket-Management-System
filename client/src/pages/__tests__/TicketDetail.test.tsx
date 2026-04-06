@@ -88,11 +88,14 @@ function renderDetail(ticketId = "TKT-0001") {
   );
 }
 
-/** Set up successful GET responses for ticket and assignable-users. */
+/** Set up successful GET responses for ticket, comments, and assignable-users. */
 function setupGetSuccess(ticket: ApiTicket = BASE_TICKET) {
   mockedAxios.get = vi.fn().mockImplementation((url: string) => {
     if (url.includes("assignable-users")) {
       return Promise.resolve({ data: USERS });
+    }
+    if (url.includes("/comments")) {
+      return Promise.resolve({ data: [] });
     }
     return Promise.resolve({ data: ticket });
   });
@@ -257,16 +260,18 @@ describe("TicketDetail — ticket data rendering", () => {
     renderDetail();
     await screen.findByText("TKT-0001");
     expect(screen.getByText("Created by")).toBeInTheDocument();
-    expect(screen.getByText("Admin")).toBeInTheDocument();
+    // "Admin" may appear in both the metadata section and the TicketReplies first bubble
+    expect(screen.getAllByText("Admin").length).toBeGreaterThanOrEqual(1);
   });
 
   it("shows the Description section with the ticket body", async () => {
     renderDetail();
     await screen.findByText("TKT-0001");
     expect(screen.getByText("Description")).toBeInTheDocument();
+    // The description text appears in both TicketDetail and the TicketReplies first bubble
     expect(
-      screen.getByText(/Users on floor 3 cannot reach the internal wiki/i)
-    ).toBeInTheDocument();
+      screen.getAllByText(/Users on floor 3 cannot reach the internal wiki/i).length
+    ).toBeGreaterThanOrEqual(1);
   });
 
   it("shows the Back to Tickets link", async () => {
