@@ -19,8 +19,11 @@ router.post("/email", async (req, res) => {
 
   const { from, name, subject, body, project } = result.data;
 
-  // Find a system admin to set as ticket creator
-  const admin = await prisma.user.findFirst({ where: { role: ROLES.ADMIN } });
+  // Find a system admin (ticket creator) and the AI agent (initial assignee)
+  const [admin, aiAgent] = await Promise.all([
+    prisma.user.findFirst({ where: { role: ROLES.ADMIN } }),
+    prisma.user.findUnique({ where: { email: "ai@system.internal" } }),
+  ]);
   if (!admin) {
     res.status(500).json({ error: "No admin user found to assign as ticket creator" });
     return;
@@ -54,9 +57,10 @@ router.post("/email", async (req, res) => {
         priority:    PRIORITY.MEDIUM,
         // Skip AI pipeline in test mode — create as OPEN so tickets are
         // immediately visible and workers don't race with test assertions
-        status:      process.env.NODE_ENV === "test" ? STATUS.OPEN : STATUS.NEW,
-        project:     project ?? "Email Intake",
-        createdById: admin.id,
+        status:       process.env.NODE_ENV === "test" ? STATUS.OPEN : STATUS.NEW,
+        project:      project ?? "Email Intake",
+        createdById:  admin.id,
+        assignedToId: aiAgent?.id ?? null,
       },
       select: { id: true, ticketId: true },
     });

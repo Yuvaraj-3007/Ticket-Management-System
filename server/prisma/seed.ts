@@ -14,34 +14,52 @@ async function main() {
 
   if (existingUser) {
     console.log("Admin user already exists, skipping seed.");
-    return;
+  } else {
+    const hashedPassword = await hashPassword(password);
+    const userId = crypto.randomUUID();
+
+    await prisma.user.create({
+      data: {
+        id: userId,
+        name: "Admin",
+        email,
+        role: "ADMIN",
+        emailVerified: true,
+        isActive: true,
+      },
+    });
+
+    await prisma.account.create({
+      data: {
+        id: crypto.randomUUID(),
+        userId,
+        accountId: userId,
+        providerId: "credential",
+        password: hashedPassword,
+      },
+    });
+
+    console.log("Admin user created (role: ADMIN)");
   }
 
-  const hashedPassword = await hashPassword(password);
-  const userId = crypto.randomUUID();
-
-  await prisma.user.create({
-    data: {
-      id: userId,
-      name: "Admin",
-      email,
-      role: "ADMIN",
-      emailVerified: true,
-      isActive: true,
-    },
-  });
-
-  await prisma.account.create({
-    data: {
-      id: crypto.randomUUID(),
-      userId,
-      accountId: userId,
-      providerId: "credential",
-      password: hashedPassword,
-    },
-  });
-
-  console.log("Admin user created (role: ADMIN)");
+  // AI agent — used as the assignee for auto-resolution attempts
+  const AI_AGENT_EMAIL = "ai@system.internal";
+  const existingAiAgent = await prisma.user.findUnique({ where: { email: AI_AGENT_EMAIL } });
+  if (!existingAiAgent) {
+    await prisma.user.create({
+      data: {
+        id: crypto.randomUUID(),
+        name: "AI",
+        email: AI_AGENT_EMAIL,
+        role: "AGENT",
+        emailVerified: true,
+        isActive: true,
+      },
+    });
+    console.log("AI agent created (role: AGENT)");
+  } else {
+    console.log("AI agent already exists, skipping.");
+  }
 }
 
 main()
