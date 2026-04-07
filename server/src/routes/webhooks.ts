@@ -6,6 +6,7 @@ import prisma from "../lib/prisma.js";
 import boss from "../lib/boss.js";
 import { CLASSIFY_QUEUE, type ClassifyJobData } from "../workers/classify.js";
 import { AUTO_RESOLVE_QUEUE, type AutoResolveJobData } from "../workers/auto-resolve.js";
+import { fetchEmailById, isGmailApiConfigured, listUnprocessedMessages, markAsRead, getWatchStartHistoryId, isCurrentlyDraining } from "../lib/gmail.js";
 
 const router = Router();
 // Parses multipart/form-data (used by Cloudmailin's Multipart Normalized format)
@@ -51,7 +52,7 @@ async function createTicketFromEmail(
         type:        TICKET_TYPE.SUPPORT,
         priority:    PRIORITY.MEDIUM,
         status:      process.env.NODE_ENV === "test" ? STATUS.OPEN : STATUS.NEW,
-        project:     project ?? "Email Intake",
+        project:     project ?? "General",
         senderName:  name ?? null,
         senderEmail: from,
         createdById:  admin.id,
@@ -97,6 +98,7 @@ router.post("/email", async (req, res) => {
     .catch((err) => console.error("[boss] Failed to enqueue auto-resolve job:", err instanceof Error ? err.message : String(err)));
 });
 
+/* CLOUDMAILIN_INBOUND
 // POST /api/webhooks/cloudmailin
 // Receives inbound email from Cloudmailin and creates a ticket.
 // Supports both Multipart Normalized (multipart/form-data) and JSON Normalized formats.
@@ -154,6 +156,137 @@ router.post("/cloudmailin", multipartParser.none(), async (req, res) => {
   boss.send(AUTO_RESOLVE_QUEUE, { ticketDbId: ticket.id, ticketId: ticket.ticketId, subject, body, adminId: admin.id, customerName: name ?? from } satisfies AutoResolveJobData)
     .then((id) => console.log(`[boss] Enqueued auto-resolve job ${id} for ticket ${ticket.ticketId}`))
     .catch((err) => console.error("[boss] Failed to enqueue auto-resolve job:", err instanceof Error ? err.message : String(err)));
+});
+*/
+
+// POST /api/webhooks/gmail
+// Receives Gmail push notifications from Google Cloud Pub/Sub.
+// Pub/Sub message format: { message: { data: base64(JSON({ emailAddress, historyId })), messageId }, subscription }
+// Always respond 200 quickly to acknowledge — Pub/Sub retries on non-200 responses.
+router.post("/gmail", async (req, res) => {
+  // Optional shared secret verification
+  if (process.env.GMAIL_PUBSUB_SECRET) {
+    const token = (req.headers["x-goog-channel-token"] as string | undefined) ?? (req.query["token"] as string | undefined);
+    if (token !== process.env.GMAIL_PUBSUB_SECRET) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+  }
+
+  // Decode Pub/Sub message envelope
+  const encoded = req.body?.message?.data as string | undefined;
+  if (!encoded) {
+    res.status(200).end(); // ack empty/test messages
+    return;
+  }
+
+  let notification: { emailAddress?: string; historyId?: string };
+  try {
+    notification = JSON.parse(Buffer.from(encoded, "base64").toString("utf-8"));
+  } catch {
+    res.status(200).end();
+    return;
+  }
+
+  // Acknowledge immediately — do work async after
+  res.status(200).end();
+
+  if (!isGmailApiConfigured()) return;
+  if (process.env.NODE_ENV === "test") return;
+  if (isCurrentlyDraining()) {
+    console.log("[gmail] Draining in progress — skipping notification");
+    return;
+  }
+
+  const historyId = notification.historyId;
+  console.log("[gmail] Notification: historyId=%s emailAddress=%s", historyId, notification.emailAddress);
+
+  // Skip notifications that arrived before the server registered the watch
+  const baseline = getWatchStartHistoryId();
+  if (baseline && historyId && BigInt(historyId) < BigInt(baseline)) {
+    console.log("[gmail] Skipping old notification (historyId %s < baseline %s)", historyId, baseline);
+    return;
+  }
+
+  try {
+    // Fetch unread INBOX messages and create a ticket for each unprocessed one.
+    // markAsRead() is called immediately after fetching each message so it is
+    // never processed again on subsequent Pub/Sub notifications.
+    const messages = await listUnprocessedMessages();
+    console.log("[gmail] Found %d unread message(s) in INBOX", messages.length);
+
+    for (const msg of messages) {
+      const { from, name, subject, body, isNewsletter } = await fetchEmailById(msg.id);
+
+      // Always mark as read so we never process the same message twice
+      await markAsRead(msg.id);
+
+      // Skip newsletters/marketing emails — they have List-Unsubscribe or List-Id headers
+      if (isNewsletter) {
+        console.log("[gmail] Skipping newsletter/automated email from %s", from);
+        continue;
+      }
+
+      // Strip quoted reply thread (lines starting with ">") to get only the new content
+      const cleanBody = body
+        .split("\n")
+        .filter((line) => !line.startsWith(">"))
+        .join("\n")
+        .replace(/On .+wrote:\s*$/ms, "")  // remove "On [date] ... wrote:" line
+        .trim() || body; // fallback to full body if stripping removes everything
+
+      // Check if this is a customer reply to an existing ticket.
+      // Our outbound emails include "Ticket: TKT-XXXX" in the footer.
+      const ticketRefMatch = body.match(/Ticket:\s*(TKT-\d{4,})/);
+      if (ticketRefMatch) {
+        const refTicketId = ticketRefMatch[1];
+        const existingTicket = await prisma.ticket.findUnique({
+          where: { ticketId: refTicketId },
+          select: { id: true, ticketId: true },
+        });
+
+        if (existingTicket) {
+          const admin = await prisma.user.findFirst({ where: { role: ROLES.ADMIN } });
+          if (admin) {
+            await prisma.comment.create({
+              data: {
+                content:    cleanBody,
+                senderType: "CUSTOMER",
+                ticketId:   existingTicket.id,
+                authorId:   admin.id,
+              },
+            });
+            // Re-open the ticket and bump updatedAt so it surfaces at top of list
+            await prisma.ticket.update({
+              where: { id: existingTicket.id },
+              data:  { status: STATUS.OPEN, updatedAt: new Date() },
+            });
+            console.log("[gmail] Added customer reply to existing ticket %s from %s", refTicketId, from);
+          }
+          continue; // do not create a new ticket
+        }
+      }
+
+      let created: Awaited<ReturnType<typeof createTicketFromEmail>>;
+      try {
+        created = await createTicketFromEmail(from, name, subject, cleanBody);
+      } catch {
+        console.error("[gmail] Failed to create ticket for message", msg.id);
+        continue;
+      }
+
+      const { ticket, admin } = created;
+      console.log("[gmail] Created ticket %s from %s", ticket.ticketId, from);
+
+      boss.send(CLASSIFY_QUEUE, { ticketDbId: ticket.id, subject, body: cleanBody } satisfies ClassifyJobData)
+        .catch((err) => console.error("[gmail] Failed to enqueue classify job:", err instanceof Error ? err.message : String(err)));
+
+      boss.send(AUTO_RESOLVE_QUEUE, { ticketDbId: ticket.id, ticketId: ticket.ticketId, subject, body: cleanBody, adminId: admin.id, customerName: name ?? from } satisfies AutoResolveJobData)
+        .catch((err) => console.error("[gmail] Failed to enqueue auto-resolve job:", err instanceof Error ? err.message : String(err)));
+    }
+  } catch (err) {
+    console.error("[gmail] Failed to process push notification:", err instanceof Error ? err.message : String(err));
+  }
 });
 
 export default router;

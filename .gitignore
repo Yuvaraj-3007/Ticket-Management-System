@@ -32,3 +32,20 @@ playwright-report/
 
 # Claude Code
 .claude/
+skills/
+skills-lock.json
+
+# AI assistant tool folders (Augment, Goose, Junie, Continue, Cortex, etc.)
+.agents/
+.augment/
+.codebuddy/
+.commandcode/
+.continue/
+.cortex/
+.crush/
+.factory/
+.goose/
+.junie/
+
+# npm lockfile (project uses Bun)
+package-lock.json

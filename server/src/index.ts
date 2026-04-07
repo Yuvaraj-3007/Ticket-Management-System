@@ -14,6 +14,7 @@ import { requireWebhookSecret } from "./middleware/webhook.js";
 import boss from "./lib/boss.js";
 import { registerClassifyWorker } from "./workers/classify.js";
 import { registerAutoResolveWorker } from "./workers/auto-resolve.js";
+import { watchInbox, isGmailApiConfigured } from "./lib/gmail.js";
 
 dotenv.config();
 
@@ -50,8 +51,11 @@ if (process.env.NODE_ENV === "production" && !process.env.MOONSHOT_API_KEY) {
 if (!process.env.MOONSHOT_API_KEY) {
   console.warn("WARNING: MOONSHOT_API_KEY is not set — AI polish will return 503.");
 }
-if (!process.env.CLOUDMAILIN_SMTP_HOST) {
-  console.warn("WARNING: CLOUDMAILIN_SMTP_* vars not set — outbound reply emails will be skipped.");
+if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+  console.warn("WARNING: GMAIL_USER / GMAIL_APP_PASSWORD not set — outbound reply emails will be skipped.");
+}
+if (!isGmailApiConfigured()) {
+  console.warn("WARNING: Gmail API not configured — inbound Gmail emails will be skipped.");
 }
 
 const app = express();
@@ -134,6 +138,7 @@ if (process.env.NODE_ENV !== "test") {
   });
   boss.start()
     .then(() => Promise.all([registerClassifyWorker(), registerAutoResolveWorker()]))
+    .then(() => watchInbox())
     .then(() => console.log("[boss] Workers registered"))
     .catch((err) => console.error("[boss] Failed to start:", err));
 }

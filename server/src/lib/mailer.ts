@@ -1,21 +1,9 @@
 import nodemailer from "nodemailer";
 
-const {
-  CLOUDMAILIN_SMTP_HOST,
-  CLOUDMAILIN_SMTP_PORT,
-  CLOUDMAILIN_SMTP_USER,
-  CLOUDMAILIN_SMTP_PASS,
-  CLOUDMAILIN_FROM_EMAIL,
-} = process.env;
+const { GMAIL_USER, GMAIL_APP_PASSWORD } = process.env;
 
 function isConfigured(): boolean {
-  return !!(
-    CLOUDMAILIN_SMTP_HOST &&
-    CLOUDMAILIN_SMTP_PORT &&
-    CLOUDMAILIN_SMTP_USER &&
-    CLOUDMAILIN_SMTP_PASS &&
-    CLOUDMAILIN_FROM_EMAIL
-  );
+  return !!(GMAIL_USER && GMAIL_APP_PASSWORD);
 }
 
 let transporter: nodemailer.Transporter | null = null;
@@ -23,12 +11,12 @@ let transporter: nodemailer.Transporter | null = null;
 function getTransporter(): nodemailer.Transporter {
   if (!transporter) {
     transporter = nodemailer.createTransport({
-      host:   CLOUDMAILIN_SMTP_HOST,
-      port:   Number(CLOUDMAILIN_SMTP_PORT),
-      secure: Number(CLOUDMAILIN_SMTP_PORT) === 465,
+      host:   "smtp.gmail.com",
+      port:   587,
+      secure: false, // STARTTLS
       auth: {
-        user: CLOUDMAILIN_SMTP_USER,
-        pass: CLOUDMAILIN_SMTP_PASS,
+        user: GMAIL_USER,
+        pass: GMAIL_APP_PASSWORD,
       },
     });
   }
@@ -63,7 +51,7 @@ export async function sendReplyEmail(opts: SendReplyEmailOptions): Promise<void>
 
   try {
     await getTransporter().sendMail({
-      from: CLOUDMAILIN_FROM_EMAIL,
+      from: GMAIL_USER,
       to,
       subject,
       text,

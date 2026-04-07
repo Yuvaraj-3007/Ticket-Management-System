@@ -109,7 +109,11 @@ function TicketReplies({ ticketId }: TicketRepliesProps) {
             className={`border rounded-lg p-4 ${c.senderType === "CUSTOMER" ? "bg-blue-50/50 dark:bg-blue-950/20" : "bg-muted/10"}`}
           >
             <div className="flex items-center gap-2 mb-2">
-              <span className="text-sm font-semibold">{c.author.name}</span>
+              <span className="text-sm font-semibold">
+                {c.senderType === "CUSTOMER"
+                  ? (ticket?.senderName ?? ticket?.createdBy.name ?? c.author.name)
+                  : c.author.name}
+              </span>
               <Badge variant="outline" className="text-xs py-0">
                 {SENDER_TYPE_LABELS[c.senderType]}
               </Badge>
