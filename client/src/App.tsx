@@ -6,6 +6,7 @@ import Dashboard from "@/pages/Dashboard";
 import Tickets from "@/pages/Tickets";
 import TicketDetailPage from "@/pages/TicketDetailPage";
 import Users from "@/pages/Users";
+import AppLayout from "@/components/AppLayout";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { data: session, isPending } = useSession();
@@ -71,44 +72,22 @@ function App() {
       <Routes>
         <Route
           path="/login"
-          element={
-            <GuestRoute>
-              <Login />
-            </GuestRoute>
-          }
+          element={<GuestRoute><Login /></GuestRoute>}
         />
+
+        {/* All authenticated pages share AppLayout (header + sidebar) */}
         <Route
-          path="/"
           element={
             <ProtectedRoute>
-              <Dashboard />
+              <AppLayout />
             </ProtectedRoute>
           }
-        />
-        <Route
-          path="/tickets"
-          element={
-            <ProtectedRoute>
-              <Tickets />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/tickets/:id"
-          element={
-            <ProtectedRoute>
-              <TicketDetailPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/users"
-          element={
-            <AdminRoute>
-              <Users />
-            </AdminRoute>
-          }
-        />
+        >
+          <Route path="/"            element={<Dashboard />} />
+          <Route path="/tickets"     element={<Tickets />} />
+          <Route path="/tickets/:id" element={<TicketDetailPage />} />
+          <Route path="/users"       element={<AdminRoute><Users /></AdminRoute>} />
+        </Route>
       </Routes>
     </BrowserRouter>
   );

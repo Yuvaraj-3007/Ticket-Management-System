@@ -14,7 +14,6 @@ import {
   type ApiTicket,
   TICKET_TYPES,
   PRIORITIES,
-  STATUSES,
   type TicketTypeValue,
   type PriorityValue,
   type StatusValue,
@@ -24,7 +23,6 @@ import {
   PRIORITY_LABELS,
   STATUS_LABELS,
 } from "@/lib/ticket-badges";
-import Navbar from "@/components/Navbar";
 import {
   Select,
   SelectContent,
@@ -39,7 +37,6 @@ import {
   ChevronsUpDown,
   X,
   Search,
-  LayoutList,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -83,9 +80,13 @@ const columns = [
     header: "ID",
     enableSorting: false,
     cell: (info) => (
-      <span className="font-mono text-xs font-medium" style={{ color: "var(--rt-text-3)" }}>
+      <Link
+        to={`/tickets/${info.row.original.id}`}
+        className="font-mono text-xs font-semibold"
+        style={{ color: "var(--rt-accent)", textDecoration: "none" }}
+      >
         {info.getValue()}
-      </span>
+      </Link>
     ),
   }),
   col.accessor("title", {
@@ -160,25 +161,45 @@ const columns = [
   }),
   col.accessor("createdAt", {
     header: "Date",
-    cell: (info) => (
-      <span className="text-xs font-mono" style={{ color: "var(--rt-text-3)" }}>
-        {new Date(info.getValue()).toLocaleDateString("en-US", {
-          month: "short", day: "numeric", year: "numeric",
-        })}
-      </span>
-    ),
+    cell: (info) => {
+      const d = new Date(info.getValue());
+      return (
+        <div className="text-xs font-mono" style={{ color: "var(--rt-text-3)" }}>
+          <div>{d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>
+          <div style={{ color: "var(--rt-text-3)", opacity: 0.7 }}>
+            {d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+          </div>
+        </div>
+      );
+    },
+  }),
+  col.display({
+    id:     "lastCustomerReplyAt",
+    header: "Last Active",
+    cell:   (info) => {
+      const raw = info.row.original.lastCustomerReplyAt;
+      if (!raw) {
+        return <span className="text-xs" style={{ color: "var(--rt-text-3)", opacity: 0.4 }}>—</span>;
+      }
+      const d = new Date(raw);
+      return (
+        <div className="text-xs font-mono" style={{ color: "var(--rt-accent)" }}>
+          <div>{d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>
+          <div style={{ opacity: 0.8 }}>
+            {d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+          </div>
+        </div>
+      );
+    },
   }),
 ];
 
 // ── Skeleton row ──────────────────────────────────────────────────────────────
 
 function SkeletonRow({ colCount }: { colCount: number }) {
-  const widths = ["w-14", "w-48", "w-28", "w-20", "w-16", "w-14", "w-20"];
+  const widths = ["w-14", "w-48", "w-28", "w-20", "w-16", "w-14", "w-20", "w-20"];
   return (
     <tr style={{ borderBottom: "1px solid var(--rt-border)" }}>
-      <td className="w-1 p-0">
-        <div className="rounded-r" style={{ width: "3px", minHeight: "52px", background: "var(--rt-border-2)" }} />
-      </td>
       {Array.from({ length: colCount }).map((_, i) => (
         <td key={i} className="px-4 py-4">
           <div
@@ -261,53 +282,37 @@ function Tickets() {
   });
 
   return (
-    <div className="min-h-screen" style={{ background: "var(--rt-bg)" }}>
-      <Navbar />
-      <main className="max-w-[1200px] mx-auto px-6 py-8">
+    <div className="px-6 py-8">
 
         {/* ── Page header ── */}
-        <div className="flex items-end justify-between mb-7">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <LayoutList className="h-3.5 w-3.5" style={{ color: "var(--rt-accent)" }} />
-              <span
-                className="text-xs font-bold uppercase tracking-[0.18em]"
-                style={{ color: "var(--rt-accent)" }}
-              >
-                Support Queue
-              </span>
-            </div>
+        <div className="mb-7">
+          <div className="flex items-center gap-3">
             <h1
-              className="text-3xl font-extrabold leading-none tracking-tight"
+              className="text-3xl font-bold tracking-tight"
               style={{ color: "var(--rt-text-1)" }}
             >
-              All Tickets
+              Tickets
             </h1>
+            {!isLoading && (
+              <span
+                className="text-sm font-semibold px-2.5 py-0.5 rounded-full"
+                style={{ background: "var(--rt-accent-bg)", color: "var(--rt-accent)", border: "1px solid var(--rt-accent)" }}
+              >
+                {total.toLocaleString()}
+              </span>
+            )}
           </div>
-
-          {/* Stats chip */}
-          <div
-            className="text-right px-4 py-2.5 rounded-xl"
-            style={{ background: "var(--rt-surface-2)", border: "1px solid var(--rt-border-2)" }}
-          >
-            <div className="text-2xl font-bold font-mono leading-none" style={{ color: "var(--rt-accent)" }}>
-              {isLoading ? "···" : total.toLocaleString()}
-            </div>
-            <div className="text-xs mt-1" style={{ color: "var(--rt-text-3)" }}>
-              {hasFilters ? "filtered results" : "total tickets"}
-            </div>
-          </div>
+          <p className="mt-1 text-sm" style={{ color: "var(--rt-text-3)" }}>
+            Manage and track all incoming support requests
+          </p>
         </div>
 
         {/* ── Filter bar ── */}
-        <div
-          className="flex flex-wrap items-center gap-2.5 mb-5 px-4 py-2.5 rounded-xl"
-          style={{ background: "var(--rt-surface)", border: "1px solid var(--rt-border)" }}
-        >
+        <div className="flex flex-wrap items-center gap-2.5 mb-5">
           {/* Search */}
           <div
             className="flex items-center gap-2 rounded-lg px-3 py-1.5 flex-1 min-w-[180px]"
-            style={{ background: "var(--rt-surface-2)", border: "1px solid var(--rt-border-2)" }}
+            style={{ background: "var(--rt-surface)", border: "1px solid var(--rt-border)" }}
           >
             <Search className="h-3.5 w-3.5 flex-shrink-0" style={{ color: "var(--rt-text-3)" }} />
             <input
@@ -325,7 +330,7 @@ function Tickets() {
             )}
           </div>
 
-          {/* Status filter */}
+          {/* Status filter — only show statuses visible in the ticket list */}
           <Select
             value={statusFilter}
             onValueChange={(v) => setStatusFilter((v as string) === "all" ? "" : (v as StatusValue))}
@@ -334,8 +339,8 @@ function Tickets() {
               className="h-8 text-xs rounded-lg px-3 border"
               style={{
                 width: "140px",
-                background: "var(--rt-surface-2)",
-                border:     "1px solid var(--rt-border-2)",
+                background: "var(--rt-surface)",
+                border:     "1px solid var(--rt-border)",
                 color:      statusFilter ? "var(--rt-text-2)" : "var(--rt-text-3)",
                 boxShadow:  "none",
               }}
@@ -344,9 +349,9 @@ function Tickets() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all" className="text-xs">All statuses</SelectItem>
-              {STATUSES.map((s) => (
-                <SelectItem key={s} value={s} className="text-xs">{STATUS_LABELS[s]}</SelectItem>
-              ))}
+              <SelectItem value="OPEN"        className="text-xs">{STATUS_LABELS["OPEN"]}</SelectItem>
+              <SelectItem value="IN_PROGRESS" className="text-xs">{STATUS_LABELS["IN_PROGRESS"]}</SelectItem>
+              <SelectItem value="CLOSED"      className="text-xs">{STATUS_LABELS["CLOSED"]}</SelectItem>
             </SelectContent>
           </Select>
 
@@ -359,8 +364,8 @@ function Tickets() {
               className="h-8 text-xs rounded-lg px-3 border"
               style={{
                 width: "148px",
-                background: "var(--rt-surface-2)",
-                border:     "1px solid var(--rt-border-2)",
+                background: "var(--rt-surface)",
+                border:     "1px solid var(--rt-border)",
                 color:      typeFilter ? "var(--rt-text-2)" : "var(--rt-text-3)",
                 boxShadow:  "none",
               }}
@@ -384,8 +389,8 @@ function Tickets() {
               className="h-8 text-xs rounded-lg px-3 border"
               style={{
                 width: "136px",
-                background: "var(--rt-surface-2)",
-                border:     "1px solid var(--rt-border-2)",
+                background: "var(--rt-surface)",
+                border:     "1px solid var(--rt-border)",
                 color:      priorityFilter ? "var(--rt-text-2)" : "var(--rt-text-3)",
                 boxShadow:  "none",
               }}
@@ -406,8 +411,8 @@ function Tickets() {
               className="flex items-center gap-1.5 text-xs rounded-lg px-3 py-1.5 ml-auto transition-all duration-150"
               style={{
                 color:      "var(--rt-text-3)",
-                background: "var(--rt-surface-2)",
-                border:     "1px solid var(--rt-border-2)",
+                background: "var(--rt-surface)",
+                border:     "1px solid var(--rt-border)",
               }}
               onMouseEnter={(e) => {
                 (e.currentTarget as HTMLElement).style.color       = "#EF4444";
@@ -446,9 +451,8 @@ function Tickets() {
                 {table.getHeaderGroups().map((hg) => (
                   <tr
                     key={hg.id}
-                    style={{ borderBottom: "1px solid var(--rt-border)", background: "var(--rt-surface-2)" }}
+                    style={{ borderBottom: "1px solid var(--rt-border)", background: "#f9fafb" }}
                   >
-                    <th className="w-1 py-3 pl-0 pr-0" />
                     {hg.headers.map((header) => {
                       const canSort = header.column.getCanSort();
                       const sorted  = header.column.getIsSorted();
@@ -459,7 +463,7 @@ function Tickets() {
                           className={`text-left px-4 py-3.5 text-xs font-bold uppercase tracking-[0.08em] select-none ${
                             canSort ? "cursor-pointer" : ""
                           }`}
-                          style={{ color: sorted ? "var(--rt-accent)" : "var(--rt-text-3)" }}
+                          style={{ color: sorted ? "var(--rt-accent)" : "var(--rt-text-1)" }}
                         >
                           {flexRender(header.column.columnDef.header, header.getContext())}
                           {canSort && <SortIcon direction={sorted} />}
@@ -476,13 +480,13 @@ function Tickets() {
                   ))
                 ) : table.getRowModel().rows.length === 0 ? (
                   <tr>
-                    <td colSpan={columns.length + 1} className="py-20 text-center">
+                    <td colSpan={columns.length} className="py-20 text-center">
                       <div className="flex flex-col items-center gap-3">
                         <div
                           className="w-12 h-12 rounded-full flex items-center justify-center"
                           style={{ background: "var(--rt-surface-2)", border: "1px solid var(--rt-border-2)" }}
                         >
-                          <LayoutList className="h-5 w-5" style={{ color: "var(--rt-text-3)" }} />
+                          <Search className="h-5 w-5" style={{ color: "var(--rt-text-3)" }} />
                         </div>
                         <p className="text-sm" style={{ color: "var(--rt-text-3)" }}>
                           {hasFilters ? "No tickets match your filters" : "No tickets yet"}
@@ -501,26 +505,17 @@ function Tickets() {
                   </tr>
                 ) : (
                   table.getRowModel().rows.map((row) => {
-                    const priority = row.original.priority;
-                    const barColor = PRIORITY_CONFIG[priority]?.bar ?? "var(--rt-border-2)";
                     return (
                       <tr
                         key={row.id}
                         style={{ borderBottom: "1px solid var(--rt-border)", transition: "background 0.1s" }}
                         onMouseEnter={(e) =>
-                          ((e.currentTarget as HTMLElement).style.background = "var(--rt-surface-2)")
+                          ((e.currentTarget as HTMLElement).style.background = "#fff9f6")
                         }
                         onMouseLeave={(e) =>
                           ((e.currentTarget as HTMLElement).style.background = "transparent")
                         }
                       >
-                        {/* Priority bar */}
-                        <td className="w-1 p-0">
-                          <div
-                            className="rounded-r"
-                            style={{ width: "3px", minHeight: "52px", background: barColor }}
-                          />
-                        </td>
                         {row.getVisibleCells().map((cell) => (
                           <td key={cell.id} className="px-4 py-4">
                             {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -607,7 +602,6 @@ function Tickets() {
             </div>
           </div>
         )}
-      </main>
     </div>
   );
 }

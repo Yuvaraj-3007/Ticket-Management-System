@@ -28,6 +28,17 @@ const TICKET_SELECT = {
   createdBy:   { select: { id: true, name: true } },
 } as const;
 
+// Extended select for the list endpoint — includes last customer reply date
+const TICKET_LIST_SELECT = {
+  ...TICKET_SELECT,
+  comments: {
+    where:   { senderType: COMMENT_SENDER_TYPES[1] },   // "CUSTOMER"
+    orderBy: { createdAt: "desc" as const },
+    take:    1,
+    select:  { createdAt: true },
+  },
+} as const;
+
 // All ticket routes require authentication
 router.use(requireAuth);
 
@@ -66,16 +77,22 @@ router.get("/", async (req, res) => {
   if (priority) where.priority = priority;
   if (type)     where.type     = type;
 
-  const [data, total] = await Promise.all([
+  const [rows, total] = await Promise.all([
     prisma.ticket.findMany({
       where,
       orderBy: { [sortBy]: sortOrder },
       skip: (page - 1) * pageSize,
       take: pageSize,
-      select: TICKET_SELECT,
+      select: TICKET_LIST_SELECT,
     }),
     prisma.ticket.count({ where }),
   ]);
+
+  // Flatten lastCustomerReplyAt from nested comments relation
+  const data = rows.map(({ comments, ...t }) => ({
+    ...t,
+    lastCustomerReplyAt: comments[0]?.createdAt?.toISOString() ?? null,
+  }));
 
   res.json({ data, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
 });

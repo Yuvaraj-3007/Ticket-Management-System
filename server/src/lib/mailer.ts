@@ -23,6 +23,13 @@ function getTransporter(): nodemailer.Transporter {
   return transporter;
 }
 
+/* === Microsoft 365 SMTP (commented out — re-enable when IMAP Basic Auth is allowed) ===
+const SUPPORT_EMAIL    = process.env.SUPPORT_EMAIL    ?? "";
+const SUPPORT_PASSWORD = process.env.SUPPORT_PASSWORD ?? "";
+const SMTP_HOST        = process.env.SMTP_HOST        ?? "smtp.office365.com";
+const SMTP_PORT        = Number(process.env.SMTP_PORT ?? 587);
+=== end M365 SMTP === */
+
 export interface SendReplyEmailOptions {
   to:             string;
   ticketId:       string;
@@ -37,11 +44,12 @@ export async function sendReplyEmail(opts: SendReplyEmailOptions): Promise<void>
   if (!to)             return;
   if (!isConfigured()) return;
 
-  const safeTitle     = ticketTitle.replace(/[\r\n]/g, " ");
-  const safeAgentName = agentName.replace(/[\r\n]/g, " ");
+  const safeTitle       = ticketTitle.replace(/[\r\n]/g, " ");
+  const safeAgentName   = agentName.replace(/[\r\n]/g, " ");
+  const safeBody        = commentContent.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   const subject = `Re: ${safeTitle}`;
   const text = [
-    commentContent,
+    safeBody,
     "",
     "---",
     `Ticket: ${ticketId}`,

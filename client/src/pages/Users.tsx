@@ -11,7 +11,6 @@ import {
   type UserRole,
 } from "@tms/core";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -168,9 +167,7 @@ function Users() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background">
-        <Navbar />
-        <main className="max-w-7xl mx-auto px-4 py-8">
+      <div className="px-6 py-8">
           <div className="flex items-center justify-between mb-6">
             <div className="space-y-2">
               <Skeleton className="h-6 w-48" />
@@ -179,7 +176,7 @@ function Users() {
             <Skeleton className="h-9 w-24 rounded-lg" />
           </div>
 
-          <div className="border rounded-lg">
+          <div className="border rounded-lg" style={{ background: "#ffffff" }}>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -220,31 +217,28 @@ function Users() {
               </TableBody>
             </Table>
           </div>
-        </main>
       </div>
     );
   }
 
   if (isError) {
     return (
-      <div className="min-h-screen bg-background">
-        <Navbar />
-        <main className="max-w-7xl mx-auto px-4 py-8">
-          <div className="bg-destructive/10 text-destructive text-sm p-4 rounded-md">
-            Failed to load users. Please refresh the page.
-          </div>
-        </main>
+      <div className="px-6 py-8">
+        <div className="bg-destructive/10 text-destructive text-sm p-4 rounded-md">
+          Failed to load users. Please refresh the page.
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <Navbar />
-      <main className="max-w-7xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold">User Management</h2>
-          <Button onClick={openCreateDialog}>Add User</Button>
+    <div className="px-6 py-8">
+        <div className="flex items-start justify-between mb-7">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight" style={{ color: "var(--rt-text-1)" }}>Users</h1>
+            <p className="mt-1 text-sm" style={{ color: "var(--rt-text-3)" }}>Manage team members and their access roles</p>
+          </div>
+          <Button onClick={openCreateDialog} style={{ background: "var(--rt-accent)", color: "#fff" }}>Add User</Button>
         </div>
 
         {pageError && (
@@ -259,16 +253,16 @@ function Users() {
           </div>
         )}
 
-        <div className="border rounded-lg">
+        <div className="border rounded-lg overflow-hidden" style={{ background: "#ffffff" }}>
           <Table>
-            <TableHeader>
+            <TableHeader style={{ background: "#f9fafb" }}>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="font-bold text-xs uppercase tracking-wide" style={{ color: "var(--rt-text-1)" }}>Name</TableHead>
+                <TableHead className="font-bold text-xs uppercase tracking-wide" style={{ color: "var(--rt-text-1)" }}>Email</TableHead>
+                <TableHead className="font-bold text-xs uppercase tracking-wide" style={{ color: "var(--rt-text-1)" }}>Role</TableHead>
+                <TableHead className="font-bold text-xs uppercase tracking-wide" style={{ color: "var(--rt-text-1)" }}>Status</TableHead>
+                <TableHead className="font-bold text-xs uppercase tracking-wide" style={{ color: "var(--rt-text-1)" }}>Created</TableHead>
+                <TableHead className="font-bold text-xs uppercase tracking-wide text-right" style={{ color: "var(--rt-text-1)" }}>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -461,7 +455,6 @@ function Users() {
             </form>
           </DialogContent>
         </Dialog>
-      </main>
     </div>
   );
 }

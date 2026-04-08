@@ -6,7 +6,8 @@ import prisma from "../lib/prisma.js";
 import boss from "../lib/boss.js";
 import { CLASSIFY_QUEUE, type ClassifyJobData } from "../workers/classify.js";
 import { AUTO_RESOLVE_QUEUE, type AutoResolveJobData } from "../workers/auto-resolve.js";
-import { fetchEmailById, isGmailApiConfigured, listUnprocessedMessages, markAsRead, getWatchStartHistoryId, isCurrentlyDraining } from "../lib/gmail.js";
+import { fetchEmailById, isGmailApiConfigured, listUnprocessedMessages, markAsRead, isCurrentlyDraining } from "../lib/gmail.js";
+import type { EmailData } from "../lib/imap.js";
 
 const router = Router();
 // Parses multipart/form-data (used by Cloudmailin's Multipart Normalized format)
@@ -159,6 +160,86 @@ router.post("/cloudmailin", multipartParser.none(), async (req, res) => {
 });
 */
 
+/* === IMAP inbound email processor (commented out — re-enable when IMAP Basic Auth is allowed in M365) ===
+export async function processImapEmail(data: EmailData): Promise<void> {
+  const { from, name, subject, body, isNewsletter } = data;
+
+  // Validate sender email format — reject malformed addresses before they enter the DB
+  if (!z.string().email().safeParse(from).success) {
+    console.warn("[imap] Skipping message with invalid from address");
+    return;
+  }
+
+  // Skip newsletters/marketing emails — RFC List-Unsubscribe, List-Id, etc.
+  if (isNewsletter) {
+    console.log("[imap] Skipping newsletter/automated email from %s", from);
+    return;
+  }
+
+  // Strip quoted reply thread (lines starting with ">") to get only new content
+  const cleanBody = body
+    .split("\n")
+    .filter((line) => !line.startsWith(">"))
+    .join("\n")
+    .replace(/^On .{1,200}wrote:\s*$/m, "") // remove "On [date] ... wrote:" line
+    .trim() || body;
+
+  // Check if this is a customer reply to an existing ticket.
+  // Our outbound emails include "Ticket: TKT-XXXX" in the footer.
+  const ticketRefMatch = body.match(/Ticket:\s*(TKT-\d{4,})/);
+  if (ticketRefMatch) {
+    const refTicketId = ticketRefMatch[1];
+    const existingTicket = await prisma.ticket.findUnique({
+      where:  { ticketId: refTicketId },
+      select: { id: true, ticketId: true },
+    });
+
+    if (existingTicket) {
+      const admin = await prisma.user.findFirst({ where: { role: ROLES.ADMIN } });
+      if (admin) {
+        await prisma.comment.create({
+          data: {
+            content:    cleanBody,
+            senderType: "CUSTOMER",
+            ticketId:   existingTicket.id,
+            authorId:   admin.id,
+          },
+        });
+        // Re-open the ticket and bump updatedAt so it surfaces at top of list
+        await prisma.ticket.update({
+          where: { id: existingTicket.id },
+          data:  { status: STATUS.OPEN, updatedAt: new Date() },
+        });
+        console.log("[imap] Added customer reply to existing ticket %s from %s", refTicketId, from);
+      }
+      return; // do not create a new ticket
+    }
+  }
+
+  let created: Awaited<ReturnType<typeof createTicketFromEmail>>;
+  try {
+    created = await createTicketFromEmail(from, name, subject, cleanBody);
+  } catch {
+    console.error("[imap] Failed to create ticket from email sent by %s", from);
+    return;
+  }
+
+  const { ticket, admin } = created;
+  console.log("[imap] Created ticket %s from %s", ticket.ticketId, from);
+
+  boss.send(CLASSIFY_QUEUE, { ticketDbId: ticket.id, subject, body: cleanBody } satisfies ClassifyJobData)
+    .catch((err) => console.error("[imap] Failed to enqueue classify job:", err instanceof Error ? err.message : String(err)));
+
+  boss.send(AUTO_RESOLVE_QUEUE, { ticketDbId: ticket.id, ticketId: ticket.ticketId, subject, body: cleanBody, adminId: admin.id, customerName: name ?? from } satisfies AutoResolveJobData)
+    .catch((err) => console.error("[imap] Failed to enqueue auto-resolve job:", err instanceof Error ? err.message : String(err)));
+}
+=== end IMAP processor === */
+
+// Prevents concurrent Gmail webhook processing — Pub/Sub can deliver multiple
+// notifications simultaneously (e.g. after a reconnect), causing duplicate tickets
+// if two handlers both call listUnprocessedMessages() before either marks as read.
+let gmailProcessing = false;
+
 // POST /api/webhooks/gmail
 // Receives Gmail push notifications from Google Cloud Pub/Sub.
 // Pub/Sub message format: { message: { data: base64(JSON({ emailAddress, historyId })), messageId }, subscription }
@@ -197,16 +278,15 @@ router.post("/gmail", async (req, res) => {
     console.log("[gmail] Draining in progress — skipping notification");
     return;
   }
-
-  const historyId = notification.historyId;
-  console.log("[gmail] Notification: historyId=%s emailAddress=%s", historyId, notification.emailAddress);
-
-  // Skip notifications that arrived before the server registered the watch
-  const baseline = getWatchStartHistoryId();
-  if (baseline && historyId && BigInt(historyId) < BigInt(baseline)) {
-    console.log("[gmail] Skipping old notification (historyId %s < baseline %s)", historyId, baseline);
+  if (gmailProcessing) {
+    console.log("[gmail] Already processing a notification — skipping concurrent request");
     return;
   }
+  gmailProcessing = true;
+
+  const safeHistory = (notification.historyId ?? "").replace(/[\r\n]/g, " ");
+  const safeAddress = (notification.emailAddress ?? "").replace(/[\r\n]/g, " ");
+  console.log("[gmail] Notification: historyId=%s emailAddress=%s", safeHistory, safeAddress);
 
   try {
     // Fetch unread INBOX messages and create a ticket for each unprocessed one.
@@ -221,6 +301,12 @@ router.post("/gmail", async (req, res) => {
       // Always mark as read so we never process the same message twice
       await markAsRead(msg.id);
 
+      // Validate sender email format — reject malformed addresses before they enter the DB
+      if (!inboundEmailSchema.shape.from.safeParse(from).success) {
+        console.warn("[gmail] Skipping message with invalid from address");
+        continue;
+      }
+
       // Skip newsletters/marketing emails — they have List-Unsubscribe or List-Id headers
       if (isNewsletter) {
         console.log("[gmail] Skipping newsletter/automated email from %s", from);
@@ -232,7 +318,7 @@ router.post("/gmail", async (req, res) => {
         .split("\n")
         .filter((line) => !line.startsWith(">"))
         .join("\n")
-        .replace(/On .+wrote:\s*$/ms, "")  // remove "On [date] ... wrote:" line
+        .replace(/^On .{1,200}wrote:\s*$/m, "")  // remove "On [date] ... wrote:" line
         .trim() || body; // fallback to full body if stripping removes everything
 
       // Check if this is a customer reply to an existing ticket.
@@ -286,6 +372,8 @@ router.post("/gmail", async (req, res) => {
     }
   } catch (err) {
     console.error("[gmail] Failed to process push notification:", err instanceof Error ? err.message : String(err));
+  } finally {
+    gmailProcessing = false;
   }
 });
 

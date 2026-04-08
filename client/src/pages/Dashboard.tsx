@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import Navbar from "@/components/Navbar";
 import {
   BarChart,
   Bar,
@@ -66,10 +65,11 @@ function Dashboard() {
     : [];
 
   return (
-    <div className="min-h-screen bg-background">
-      <Navbar />
-      <main className="max-w-7xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
+    <div className="px-6 py-8">
+        <div className="mb-7">
+          <h1 className="text-3xl font-bold tracking-tight" style={{ color: "var(--rt-text-1)" }}>Dashboard</h1>
+          <p className="mt-1 text-sm" style={{ color: "var(--rt-text-3)" }}>Overview of your support queue performance</p>
+        </div>
 
         {isError && (
           <p className="text-destructive mb-4">Failed to load dashboard stats.</p>
@@ -142,7 +142,6 @@ function Dashboard() {
             )}
           </CardContent>
         </Card>
-      </main>
     </div>
   );
 }

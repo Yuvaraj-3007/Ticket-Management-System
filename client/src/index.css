@@ -56,7 +56,7 @@
     --card-foreground: oklch(0.145 0 0);
     --popover: oklch(1 0 0);
     --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.60 0.17 213);
+    --primary: oklch(0.62 0.19 38);
     --primary-foreground: oklch(1 0 0);
     --secondary: oklch(0.94 0.03 220);
     --secondary-foreground: oklch(0.20 0.03 230);
@@ -67,8 +67,8 @@
     --destructive: oklch(0.577 0.245 27.325);
     --border: oklch(0.88 0.03 220);
     --input: oklch(0.88 0.03 220);
-    --ring: oklch(0.60 0.17 213);
-    --chart-1: oklch(0.60 0.17 213);
+    --ring: oklch(0.62 0.19 38);
+    --chart-1: oklch(0.62 0.19 38);
     --chart-2: oklch(0.55 0.18 150);
     --chart-3: oklch(0.65 0.18 55);
     --chart-4: oklch(0.57 0.22 25);
@@ -76,15 +76,15 @@
     --radius: 0.5rem;
     --sidebar: oklch(0.97 0.01 220);
     --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.60 0.17 213);
+    --sidebar-primary: oklch(0.62 0.19 38);
     --sidebar-primary-foreground: oklch(1 0 0);
     --sidebar-accent: oklch(0.94 0.03 220);
     --sidebar-accent-foreground: oklch(0.20 0.03 230);
     --sidebar-border: oklch(0.88 0.03 220);
-    --sidebar-ring: oklch(0.60 0.17 213);
+    --sidebar-ring: oklch(0.62 0.19 38);
 
     /* Right Tracker layout tokens — light */
-    --rt-bg:        #F8FAFC;
+    --rt-bg:        #FFF5F0;
     --rt-surface:   #FFFFFF;
     --rt-surface-2: #F1F5F9;
     --rt-border:    #E2E8F0;
@@ -92,8 +92,8 @@
     --rt-text-1:    #0F172A;
     --rt-text-2:    #334155;
     --rt-text-3:    #94A3B8;
-    --rt-accent:    #0284C7;
-    --rt-accent-bg: rgba(2,132,199,0.08);
+    --rt-accent:    #E86425;
+    --rt-accent-bg: rgba(232,100,37,0.08);
 
     /* Status badge tokens — light (dark text for white backgrounds) */
     --status-new-dot:         #8B5CF6;
@@ -124,7 +124,7 @@
     --card-foreground: oklch(0.93 0.018 248);
     --popover: oklch(0.14 0.026 252);
     --popover-foreground: oklch(0.93 0.018 248);
-    --primary: oklch(0.74 0.14 213);
+    --primary: oklch(0.72 0.18 38);
     --primary-foreground: oklch(0.09 0.018 252);
     --secondary: oklch(0.17 0.028 252);
     --secondary-foreground: oklch(0.93 0.018 248);
@@ -135,20 +135,20 @@
     --destructive: oklch(0.63 0.22 25);
     --border: oklch(0.21 0.038 252);
     --input: oklch(0.21 0.038 252);
-    --ring: oklch(0.74 0.14 213);
-    --chart-1: oklch(0.74 0.14 213);
+    --ring: oklch(0.72 0.18 38);
+    --chart-1: oklch(0.72 0.18 38);
     --chart-2: oklch(0.68 0.18 150);
     --chart-3: oklch(0.72 0.18 55);
     --chart-4: oklch(0.63 0.22 25);
     --chart-5: oklch(0.60 0.20 290);
     --sidebar: oklch(0.11 0.02 252);
     --sidebar-foreground: oklch(0.93 0.018 248);
-    --sidebar-primary: oklch(0.74 0.14 213);
+    --sidebar-primary: oklch(0.72 0.18 38);
     --sidebar-primary-foreground: oklch(0.09 0.018 252);
     --sidebar-accent: oklch(0.17 0.028 252);
     --sidebar-accent-foreground: oklch(0.93 0.018 248);
     --sidebar-border: oklch(0.21 0.038 252);
-    --sidebar-ring: oklch(0.74 0.14 213);
+    --sidebar-ring: oklch(0.72 0.18 38);
 
     /* Right Tracker layout tokens — dark */
     --rt-bg:        #070C17;
@@ -159,8 +159,8 @@
     --rt-text-1:    #C8DFF4;
     --rt-text-2:    #7A9FBF;
     --rt-text-3:    #2D4F6E;
-    --rt-accent:    #38BDF8;
-    --rt-accent-bg: rgba(56,189,248,0.08);
+    --rt-accent:    #FF7A3D;
+    --rt-accent-bg: rgba(255,122,61,0.08);
 
     /* Status badge tokens — dark (bright text for dark backgrounds) */
     --status-new-dot:         #A78BFA;
@@ -189,8 +189,10 @@
     }
   body {
     @apply bg-background text-foreground;
+    font-family: 'Inter Variable', 'Inter', sans-serif;
     }
   html {
     @apply font-sans;
+    font-family: 'Inter Variable', 'Inter', sans-serif;
     }
 }

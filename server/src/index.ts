@@ -15,6 +15,10 @@ import boss from "./lib/boss.js";
 import { registerClassifyWorker } from "./workers/classify.js";
 import { registerAutoResolveWorker } from "./workers/auto-resolve.js";
 import { watchInbox, isGmailApiConfigured } from "./lib/gmail.js";
+/* === IMAP (commented out — re-enable when IMAP Basic Auth is allowed in M365) ===
+import { watchImapInbox, isImapConfigured, resetImapClient } from "./lib/imap.js";
+import { processImapEmail } from "./routes/webhooks.js";
+=== end IMAP === */
 
 dotenv.config();
 
@@ -141,6 +145,23 @@ if (process.env.NODE_ENV !== "test") {
     .then(() => watchInbox())
     .then(() => console.log("[boss] Workers registered"))
     .catch((err) => console.error("[boss] Failed to start:", err));
+
+  /* === IMAP startup (commented out — re-enable when IMAP Basic Auth is allowed in M365) ===
+  async function startImapWithRetry() {
+    if (!isImapConfigured()) return;
+    while (true) {
+      await watchImapInbox(processImapEmail).catch((err) => {
+        console.error("[imap] Error:", err instanceof Error ? err.message : String(err));
+        if (err?.response) console.error("[imap] Server response:", err.response);
+        if (err?.authenticationFailed) console.error("[imap] Authentication failed — check SUPPORT_EMAIL and SUPPORT_PASSWORD, and ensure IMAP Basic Auth is enabled in M365 Exchange Admin.");
+      });
+      console.log("[imap] Reconnecting in 10s...");
+      resetImapClient();
+      await new Promise((r) => setTimeout(r, 10_000));
+    }
+  }
+  startImapWithRetry();
+  === end IMAP startup === */
 }
 
 server.listen(PORT, () => {

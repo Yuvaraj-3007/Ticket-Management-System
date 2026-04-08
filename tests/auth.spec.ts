@@ -381,7 +381,7 @@ test.describe("Role-based access control", () => {
     await page.goto("/users");
     await expect(page).toHaveURL("/users");
     await expect(
-      page.getByRole("heading", { name: "User Management" })
+      page.getByRole("heading", { name: "Users" })
     ).toBeVisible();
   });
 
@@ -397,7 +397,7 @@ test.describe("Role-based access control", () => {
     await page.getByRole("link", { name: "Users" }).click();
     await expect(page).toHaveURL("/users");
     await expect(
-      page.getByRole("heading", { name: "User Management" })
+      page.getByRole("heading", { name: "Users" })
     ).toBeVisible();
   });
 });

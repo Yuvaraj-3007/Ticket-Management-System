@@ -54,8 +54,9 @@ export const apiTicketSchema = z.object({
   senderEmail: z.string().nullable().optional(),
   assignedTo:  z.object({ id: z.string(), name: z.string() }).nullable(),
   createdBy:   z.object({ id: z.string(), name: z.string() }),
-  createdAt:   z.string(),
-  updatedAt:   z.string(),
+  createdAt:            z.string(),
+  updatedAt:            z.string(),
+  lastCustomerReplyAt:  z.string().nullable().optional(),
 });
 
 export const apiTicketsSchema = z.array(apiTicketSchema);

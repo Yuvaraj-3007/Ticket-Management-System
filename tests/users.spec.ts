@@ -37,7 +37,7 @@ async function loginAsAdmin(page: Page) {
 async function goToUsersPage(page: Page) {
   await page.goto("/users");
   await expect(
-    page.getByRole("heading", { name: "User Management" })
+    page.getByRole("heading", { name: "Users" })
   ).toBeVisible();
 }
 
