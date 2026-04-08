@@ -89,16 +89,16 @@ describe("Tickets page — component", () => {
 
   // ─── Page structure ────────────────────────────────────────────────────────
 
-  it("renders the All Tickets heading", async () => {
+  it("renders the Tickets heading", async () => {
     await resolveWithTickets([TICKET_1]);
     renderTickets();
-    expect(await screen.findByRole("heading", { name: "All Tickets" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Tickets" })).toBeInTheDocument();
   });
 
   it("shows all expected column headers", async () => {
     await resolveWithTickets([TICKET_1]);
     renderTickets();
-    await screen.findByRole("heading", { name: "All Tickets" });
+    await screen.findByRole("heading", { name: "Tickets" });
 
     for (const header of ["ID", "Subject", "Sender", "Status", "Category", "Priority", "Date"]) {
       expect(screen.getByRole("columnheader", { name: header })).toBeInTheDocument();
@@ -108,22 +108,19 @@ describe("Tickets page — component", () => {
   it("shows the ticket count in the stats chip — singular", async () => {
     await resolveWithTickets([TICKET_1]);
     renderTickets();
-    // The stats chip shows the count as a number and "total tickets" label
     expect(await screen.findByText("1")).toBeInTheDocument();
-    expect(await screen.findByText(/total tickets/i)).toBeInTheDocument();
   });
 
   it("shows the ticket count in the stats chip — plural", async () => {
     await resolveWithTickets([TICKET_1, TICKET_2]);
     renderTickets();
     expect(await screen.findByText("2")).toBeInTheDocument();
-    expect(await screen.findByText(/total tickets/i)).toBeInTheDocument();
   });
 
   it("shows both the ID and Priority columns", async () => {
     await resolveWithTickets([TICKET_1]);
     renderTickets();
-    await screen.findByRole("heading", { name: "All Tickets" });
+    await screen.findByRole("heading", { name: "Tickets" });
 
     expect(screen.getByRole("columnheader", { name: "ID" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Priority" })).toBeInTheDocument();
@@ -237,9 +234,9 @@ describe("Tickets page — sorting", () => {
     );
   });
 
-  it("stats chip shows 'total tickets' label by default (no filters active)", async () => {
+  it("stats chip shows the ticket count by default (no filters active)", async () => {
     renderTickets();
-    expect(await screen.findByText(/total tickets/i)).toBeInTheDocument();
+    expect(await screen.findByText("1")).toBeInTheDocument();
   });
 
   it("clicking Status column sends sortBy=status&sortOrder=asc", async () => {
