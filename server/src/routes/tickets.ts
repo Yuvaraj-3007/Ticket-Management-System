@@ -1,5 +1,9 @@
 import { Router, type Request, type Response } from "express";
+import { hashPassword } from "better-auth/crypto";
 import rateLimit from "express-rate-limit";
+import { randomUUID } from "node:crypto";
+import path from "node:path";
+import multer from "multer";
 import { generateText } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { requireAuth } from "../middleware/auth.js";
@@ -7,25 +11,47 @@ import prisma from "../lib/prisma.js";
 import { ticketQuerySchema, assignTicketSchema, updateStatusSchema, updateTypeSchema, createCommentSchema, polishReplySchema, ROLES, COMMENT_SENDER_TYPES } from "@tms/core";
 import { Prisma } from "../generated/prisma/client.js";
 import { sendReplyEmail } from "../lib/mailer.js";
+import { getAllClients, getEmployeeDirectory, getProjectEmployees, type HrmsEmployee } from "../lib/hrms.js";
+import { uploadArray } from "../lib/upload.js";
+
+// Wrap multer's callback API into a Promise so we can use await in async routes
+function runUpload(req: Request, res: Response): Promise<void> {
+  return new Promise((resolve, reject) => {
+    uploadArray(req as any, res as any, (err: unknown) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+}
 
 const router = Router();
 
+// H7 — strip characters that could cause stored XSS via filename display
+function sanitizeFilename(name: string): string {
+  return name.replace(/[<>"'&/\\]/g, "_").slice(0, 255);
+}
+
 // Prisma select shape that matches ApiTicket — used by every endpoint that returns a ticket
 const TICKET_SELECT = {
-  id:          true,
-  ticketId:    true,
-  title:       true,
-  description: true,
-  type:        true,
-  priority:    true,
-  status:      true,
-  project:     true,
-  senderName:  true,
-  senderEmail: true,
-  createdAt:   true,
-  updatedAt:   true,
-  assignedTo:  { select: { id: true, name: true } },
-  createdBy:   { select: { id: true, name: true } },
+  id:              true,
+  ticketId:        true,
+  title:           true,
+  description:     true,
+  type:            true,
+  priority:        true,
+  status:          true,
+  project:         true,
+  hrmsProjectId:   true,
+  hrmsProjectName: true,
+  senderName:      true,
+  senderEmail:     true,
+  rating:          true,
+  ratingText:      true,
+  createdAt:       true,
+  updatedAt:       true,
+  assignedTo:      { select: { id: true, name: true } },
+  createdBy:       { select: { id: true, name: true } },
+  attachments:     { select: { id: true, filename: true, mimetype: true, size: true, filepath: true, createdAt: true } },
 } as const;
 
 // Extended select for the list endpoint — includes last customer reply date
@@ -41,6 +67,16 @@ const TICKET_LIST_SELECT = {
 
 // All ticket routes require authentication
 router.use(requireAuth);
+
+// Block CUSTOMER-role sessions from accessing the agent/admin ticket API
+router.use((req, res, next) => {
+  const role = (req as any).user?.role;
+  if (role !== ROLES.ADMIN && role !== ROLES.AGENT) {
+    res.status(403).json({ error: "Access denied" });
+    return;
+  }
+  next();
+});
 
 const polishLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -59,23 +95,21 @@ router.get("/", async (req, res) => {
     return;
   }
 
-  const { sortBy, sortOrder, search, status, priority, type, page, pageSize } = result.data;
+  const { sortBy, sortOrder, search, status, priority, type, assignedToId, clientId, from, to, page, pageSize } = result.data;
 
-  const INTERNAL_STATUSES = ["NEW", "PROCESSING", "RESOLVED"] as const;
-
-  const where: Prisma.TicketWhereInput = {
-    status: { notIn: ["NEW", "PROCESSING", "RESOLVED"] },
-  };
+  const where: Prisma.TicketWhereInput = {};
   if (search)   where.title    = { contains: search, mode: "insensitive" };
-  if (status) {
-    if ((INTERNAL_STATUSES as readonly string[]).includes(status)) {
-      res.status(400).json({ error: "Invalid status filter" });
-      return;
-    }
-    where.status = status;
-  }
+  if (status)   where.status   = status;
   if (priority) where.priority = priority;
   if (type)     where.type     = type;
+  if (clientId) where.hrmsClientId = clientId;
+  if (assignedToId === "unassigned") {
+    where.assignedToId = null;
+  } else if (assignedToId) {
+    where.assignedToId = assignedToId;
+  }
+  if (from) where.createdAt = { ...(where.createdAt as any), gte: new Date(from) };
+  if (to)   where.createdAt = { ...(where.createdAt as any), lte: new Date(to) };
 
   const [rows, total] = await Promise.all([
     prisma.ticket.findMany({
@@ -88,24 +122,124 @@ router.get("/", async (req, res) => {
     prisma.ticket.count({ where }),
   ]);
 
-  // Flatten lastCustomerReplyAt from nested comments relation
-  const data = rows.map(({ comments, ...t }) => ({
+  // Flatten lastCustomerReplyAt from nested comments relation + transform filepath→url
+  const data = rows.map(({ comments, attachments, ...t }) => ({
     ...t,
     lastCustomerReplyAt: comments[0]?.createdAt?.toISOString() ?? null,
+    attachments: attachments.map((a) => ({
+      id:        a.id,
+      filename:  a.filename,
+      mimetype:  a.mimetype,
+      size:      a.size,
+      url:       `/uploads/${path.basename(a.filepath)}`,
+      createdAt: a.createdAt.toISOString(),
+    })),
   }));
 
   res.json({ data, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
 });
 
-// GET /api/tickets/assignable-users — active users that can be assigned a ticket
-// Must be registered BEFORE /:id to avoid "assignable-users" matching as a ticketId param
-router.get("/assignable-users", async (_req, res) => {
-  const users = await prisma.user.findMany({
-    where:   { isActive: true },
-    select:  { id: true, name: true },
-    orderBy: { name: "asc" },
+// GET /api/tickets/clients — all active HRMS clients (falls back to distinct DB clients)
+// Used to populate the client filter dropdown in the admin ticket list
+router.get("/clients", async (_req, res) => {
+  // Try HRMS first — returns ALL clients regardless of whether they have tickets
+  const hrmsClients = await getAllClients();
+  if (hrmsClients.length > 0) {
+    res.json(hrmsClients.map((c) => ({ id: c.id, name: c.customerName })));
+    return;
+  }
+
+  // Fallback: distinct clients from existing tickets in the DB
+  const rows = await prisma.ticket.findMany({
+    where:    { hrmsClientId: { not: null } },
+    select:   { hrmsClientId: true, hrmsClientName: true },
+    distinct: ["hrmsClientId"],
+    orderBy:  { hrmsClientName: "asc" },
   });
-  res.json(users);
+  res.json(rows.map((r) => ({ id: r.hrmsClientId!, name: r.hrmsClientName ?? r.hrmsClientId! })));
+});
+
+// GET /api/tickets/assignable-users — active users that can be assigned a ticket
+// When projectId is supplied: only employees assigned to that HRMS project are returned.
+// Without projectId: all active TMS users + HRMS directory employees.
+// Must be registered BEFORE /:id to avoid "assignable-users" matching as a ticketId param
+router.get("/assignable-users", async (req, res) => {
+  const { projectId } = req.query as { projectId?: string };
+
+  const [users, hrmsEmployees] = await Promise.all([
+    prisma.user.findMany({
+      where:   { isActive: true },
+      select:  { id: true, name: true, email: true },
+      orderBy: { name: "asc" },
+    }),
+    projectId ? getProjectEmployees(projectId) : getEmployeeDirectory(),
+  ]);
+
+  const tmsEmailSet  = new Set(users.map((u) => u.email.toLowerCase()));
+  const hrmsEmailSet = new Set(hrmsEmployees.map((e) => e.email.toLowerCase()));
+
+  let merged: { id: string; name: string }[];
+
+  if (projectId && hrmsEmployees.length > 0) {
+    // For each HRMS project member, find their TMS account (matched by email).
+    // If none exists, auto-provision a TMS AGENT account so they can be assigned tickets.
+    const provisionedUsers = await Promise.all(
+      hrmsEmployees.map(async (emp: HrmsEmployee) => {
+        const existing = users.find((u) => u.email.toLowerCase() === emp.email.toLowerCase());
+        // Use HRMS name as source of truth — TMS account name may be truncated/different
+        if (existing) return { id: existing.id, name: emp.name || existing.name };
+
+        // Auto-provision: create TMS user + credential account stub
+        // The employee can set their password later via "forgot password"
+        const userId = randomUUID();
+        const newUser = await prisma.$transaction(async (tx) => {
+          const u = await tx.user.create({
+            data: {
+              id:            userId,
+              name:          emp.name,
+              email:         emp.email,
+              role:          ROLES.AGENT,
+              emailVerified: true,
+              isActive:      true,
+            },
+            select: { id: true, name: true },
+          });
+          // Create a credential account stub — password is a random UUID (unusable until reset)
+          await tx.account.create({
+            data: {
+              id:         randomUUID(),
+              userId,
+              accountId:  userId,
+              providerId: "credential",
+              password:   await hashPassword(randomUUID()), // M-3 — hashed placeholder; reset via forgot-password
+            },
+          });
+          return u;
+        }).catch(() => null); // if duplicate email race condition, skip
+
+        if (!newUser) {
+          // Was created concurrently — look it up
+          const found = await prisma.user.findUnique({ where: { email: emp.email }, select: { id: true, name: true } });
+          return found ?? null;
+        }
+        return newUser;
+      })
+    );
+
+    merged = provisionedUsers.filter(Boolean) as { id: string; name: string }[];
+  } else {
+    // No project filter — merge ALL active TMS users + HRMS directory employees
+    // TMS users take precedence (they have a real DB id used for assignment)
+    const hrmsExtra = hrmsEmployees
+      .filter((e) => !tmsEmailSet.has(e.email.toLowerCase()) && e.name)
+      .map((e) => ({ id: e.id, name: e.name }));
+    merged = [
+      ...users.map((u) => ({ id: u.id, name: u.name })),
+      ...hrmsExtra,
+    ].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  res.json(merged);
 });
 
 // GET /api/tickets/stats — dashboard statistics
@@ -114,12 +248,34 @@ router.get("/stats", async (_req, res) => {
   thirtyDaysAgo.setUTCDate(thirtyDaysAgo.getUTCDate() - 29); // include today → 30 days total
   thirtyDaysAgo.setUTCHours(0, 0, 0, 0);
 
-  const [total, open, aiResolved, resolvedTickets, rawDaily] = await Promise.all([
+  const todayStart = new Date();
+  todayStart.setUTCHours(0, 0, 0, 0);
+
+  const openStatuses = ["OPEN_NOT_STARTED", "OPEN_IN_PROGRESS", "OPEN_QA", "OPEN_DONE"] as const;
+
+  const [
+    total,
+    open,
+    unAssigned,
+    aiResolved,
+    createdToday,
+    closedToday,
+    resolvedTickets,
+    rawDaily,
+    ratingAgg,
+    openByAgent,
+    closedTodayByAgent,
+    agents,
+    recentTickets,
+  ] = await Promise.all([
     prisma.ticket.count(),
-    prisma.ticket.count({ where: { status: "OPEN" } }),
-    prisma.ticket.count({ where: { status: "RESOLVED" } }),
+    prisma.ticket.count({ where: { status: { in: [...openStatuses] } } }),
+    prisma.ticket.count({ where: { status: "UN_ASSIGNED" } }),
+    prisma.ticket.count({ where: { status: "OPEN_DONE" } }),
+    prisma.ticket.count({ where: { createdAt: { gte: todayStart } } }),
+    prisma.ticket.count({ where: { status: "CLOSED", updatedAt: { gte: todayStart } } }),
     prisma.ticket.findMany({
-      where:  { status: "RESOLVED" },
+      where:  { status: "OPEN_DONE" },
       select: { createdAt: true, updatedAt: true },
     }),
     prisma.$queryRaw<{ day: Date; count: number }[]>`
@@ -129,6 +285,37 @@ router.get("/stats", async (_req, res) => {
       GROUP BY DATE("createdAt")
       ORDER BY day ASC
     `,
+    prisma.ticket.aggregate({
+      where: { rating: { not: null } },
+      _avg:  { rating: true },
+      _count: { rating: true },
+    }),
+    prisma.ticket.groupBy({
+      by:    ["assignedToId"],
+      where: { assignedToId: { not: null }, status: { in: [...openStatuses] } },
+      _count: { _all: true },
+    }),
+    prisma.ticket.groupBy({
+      by:    ["assignedToId"],
+      where: { assignedToId: { not: null }, status: "CLOSED", updatedAt: { gte: todayStart } },
+      _count: { _all: true },
+    }),
+    prisma.user.findMany({
+      where:   { isActive: true, role: { in: ["ADMIN", "AGENT"] } },
+      select:  { id: true, name: true, role: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.ticket.findMany({
+      orderBy: { updatedAt: "desc" },
+      take:    8,
+      select: {
+        ticketId:   true,
+        title:      true,
+        status:     true,
+        updatedAt:  true,
+        assignedTo: { select: { name: true } },
+      },
+    }),
   ]);
 
   const aiResolvedPercent =
@@ -156,7 +343,39 @@ router.get("/stats", async (_req, res) => {
     dailyCounts.push({ date: key, count: countByDay.get(key) ?? 0 });
   }
 
-  res.json({ total, open, aiResolved, aiResolvedPercent, avgResolutionTimeMs, dailyCounts });
+  // Build agent workload map
+  const openMap        = new Map(openByAgent.map((r) => [r.assignedToId!, r._count._all]));
+  const closedTodayMap = new Map(closedTodayByAgent.map((r) => [r.assignedToId!, r._count._all]));
+  const agentWorkload  = agents
+    .map((a) => ({
+      id:          a.id,
+      name:        a.name,
+      openTickets: openMap.get(a.id) ?? 0,
+      closedToday: closedTodayMap.get(a.id) ?? 0,
+    }))
+    .sort((a, b) => b.openTickets - a.openTickets);
+
+  res.json({
+    total,
+    open,
+    unAssigned,
+    aiResolved,
+    aiResolvedPercent,
+    avgResolutionTimeMs,
+    createdToday,
+    closedToday,
+    avgRating:  ratingAgg._avg.rating != null ? Math.round(ratingAgg._avg.rating * 10) / 10 : null,
+    ratedCount: ratingAgg._count.rating,
+    dailyCounts,
+    agentWorkload,
+    recentActivity: recentTickets.map((t) => ({
+      ticketId:   t.ticketId,
+      title:      t.title,
+      status:     t.status,
+      updatedAt:  t.updatedAt.toISOString(),
+      assignedTo: t.assignedTo?.name ?? null,
+    })),
+  });
 });
 
 // PATCH /api/tickets/:id/assignee — assign or unassign a ticket
@@ -267,14 +486,47 @@ router.get("/:id/comments", async (req: Request<{ id: string }>, res: Response) 
 
   const comments = await prisma.comment.findMany({
     where:   { ticketId: ticket.id },
-    select:  { id: true, content: true, senderType: true, author: { select: { id: true, name: true } }, createdAt: true },
+    select:  {
+      id:          true,
+      content:     true,
+      senderType:  true,
+      author:      { select: { id: true, name: true } },
+      createdAt:   true,
+      attachments: { select: { id: true, filename: true, mimetype: true, size: true, filepath: true } },
+    },
     orderBy: { createdAt: "asc" },
   });
-  res.json(comments);
+  res.json(comments.map((c) => ({
+    ...c,
+    attachments: c.attachments.map((a) => ({
+      id:       a.id,
+      filename: a.filename,
+      mimetype: a.mimetype,
+      size:     a.size,
+      url:      "/uploads/" + path.basename(a.filepath),
+    })),
+  })));
 });
 
 // POST /api/tickets/:id/comments — create a new comment
 router.post("/:id/comments", async (req: Request<{ id: string }>, res: Response) => {
+  // Run multer to parse multipart/form-data (files + text fields)
+  try {
+    await runUpload(req, res);
+  } catch (err: unknown) {
+    const isMulterError = err instanceof multer.MulterError;
+    if (isMulterError && (err as multer.MulterError).code === "LIMIT_FILE_SIZE") {
+      res.status(400).json({ error: "Each image must be under 1MB" });
+      return;
+    }
+    if (isMulterError && (err as multer.MulterError).code === "LIMIT_FILE_COUNT") {
+      res.status(400).json({ error: "Maximum 5 images allowed" });
+      return;
+    }
+    res.status(400).json({ error: err instanceof Error ? err.message : "File upload error" });
+    return;
+  }
+
   const parsed = createCommentSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ fieldErrors: parsed.error.flatten().fieldErrors });
@@ -293,17 +545,53 @@ router.post("/:id/comments", async (req: Request<{ id: string }>, res: Response)
   const isAgentOrAdmin = req.user!.role === ROLES.ADMIN || req.user!.role === ROLES.AGENT;
   const senderType = isAgentOrAdmin ? COMMENT_SENDER_TYPES[0] : COMMENT_SENDER_TYPES[1];
 
-  const comment = await prisma.comment.create({
-    data: {
-      content:    parsed.data.content,
-      senderType,
-      ticketId:   ticket.id,
-      authorId:   req.user!.id,
-    },
-    select: { id: true, content: true, senderType: true, author: { select: { id: true, name: true } }, createdAt: true },
-  });
+  const [comment] = await Promise.all([
+    prisma.comment.create({
+      data: {
+        content:    parsed.data.content,
+        senderType,
+        ticketId:   ticket.id,
+        authorId:   req.user!.id,
+      },
+      select: {
+        id:          true,
+        content:     true,
+        senderType:  true,
+        author:      { select: { id: true, name: true } },
+        createdAt:   true,
+        attachments: { select: { id: true, filename: true, mimetype: true, size: true, filepath: true } },
+      },
+    }),
+    prisma.ticket.update({ where: { id: ticket.id }, data: { updatedAt: new Date() } }),
+  ]);
 
-  res.status(201).json(comment);
+  // Save comment attachments
+  const uploadedFiles = req.files as Express.Multer.File[] | undefined;
+  if (uploadedFiles && uploadedFiles.length > 0) {
+    await prisma.attachment.createMany({
+      data: uploadedFiles.map((f) => ({
+        id:        randomUUID(),
+        filename:  sanitizeFilename(f.originalname), // H7 — prevent stored XSS via filename
+        filepath:  f.path,
+        mimetype:  f.mimetype,
+        size:      f.size,
+        commentId: comment.id,
+      })),
+    });
+  }
+
+  // Transform filepath → public URL and respond
+  const response = {
+    ...comment,
+    attachments: comment.attachments.map((a) => ({
+      id:       a.id,
+      filename: a.filename,
+      mimetype: a.mimetype,
+      size:     a.size,
+      url:      "/uploads/" + path.basename(a.filepath),
+    })),
+  };
+  res.status(201).json(response);
 
   if (isAgentOrAdmin && ticket.senderEmail) {
     sendReplyEmail({
@@ -441,7 +729,17 @@ router.get("/:id", async (req: Request<{ id: string }>, res: Response) => {
     return;
   }
 
-  res.json(ticket);
+  res.json({
+    ...ticket,
+    attachments: ticket.attachments.map((a) => ({
+      id:        a.id,
+      filename:  a.filename,
+      mimetype:  a.mimetype,
+      size:      a.size,
+      url:       "/uploads/" + path.basename(a.filepath),
+      createdAt: a.createdAt,
+    })),
+  });
 });
 
 export default router;

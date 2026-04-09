@@ -5,27 +5,47 @@ import { Prisma } from "../generated/prisma/client.js";
 import prisma from "../lib/prisma.js";
 import { requireAdmin } from "../middleware/auth.js";
 import { ROLES, createUserSchema, editUserSchema } from "@tms/core";
+import { getEmployeeDirectory } from "../lib/hrms.js";
 
 const router = Router();
 
 // All routes require admin
 router.use(requireAdmin);
 
-// GET /api/users — list all users
+// GET /api/users — list all users (TMS accounts + HRMS employees merged)
 router.get("/", async (_req: Request, res: Response) => {
   try {
-    const users = await prisma.user.findMany({
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        isActive: true,
-        createdAt: true,
-      },
-      orderBy: { createdAt: "desc" },
-    });
-    res.json(users);
+    const [tmsUsers, hrmsEmployees] = await Promise.all([
+      prisma.user.findMany({
+        where: { role: { in: ["ADMIN", "AGENT"] } },
+        select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+      }),
+      getEmployeeDirectory(),
+    ]);
+
+    // TMS users with source flag
+    const tmsEmailSet = new Set(tmsUsers.map((u) => u.email.toLowerCase()));
+    const tmsResult = tmsUsers.map((u) => ({
+      ...u,
+      createdAt: u.createdAt.toISOString(),
+      source: "TMS" as const,
+    }));
+
+    // HRMS-only employees (not yet in TMS)
+    const hrmsOnly = hrmsEmployees
+      .filter((e) => e.email && !tmsEmailSet.has(e.email.toLowerCase()))
+      .map((e) => ({
+        id:        `hrms:${e.id}`,
+        name:      e.name,
+        email:     e.email,
+        role:      "AGENT" as const,
+        isActive:  true,
+        createdAt: null,
+        source:    "HRMS" as const,
+      }));
+
+    res.json([...tmsResult, ...hrmsOnly]);
   } catch {
     res.status(500).json({ error: "Failed to fetch users" });
   }
@@ -147,15 +167,15 @@ router.put("/:id", async (req: Request<{ id: string }>, res: Response) => {
       },
     });
 
+    // M-4 — always invalidate sessions on any user update (role/email change takes effect immediately)
+    await prisma.session.deleteMany({ where: { userId: id } });
+
     if (password) {
       const hashedPassword = await hashPassword(password);
-      await prisma.$transaction([
-        prisma.account.updateMany({
-          where: { userId: id, providerId: "credential" },
-          data: { password: hashedPassword },
-        }),
-        prisma.session.deleteMany({ where: { userId: id } }),
-      ]);
+      await prisma.account.updateMany({
+        where: { userId: id, providerId: "credential" },
+        data: { password: hashedPassword },
+      });
     }
 
     res.json(user);

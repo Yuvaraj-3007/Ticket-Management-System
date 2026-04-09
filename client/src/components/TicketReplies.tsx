@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { ImageUploadField } from "@/components/portal/ImageUploadField";
 
 const API_URL = import.meta.env.VITE_API_URL || "";
 
@@ -17,6 +18,7 @@ const SENDER_TYPE_LABELS = {
   AGENT:    "Agent",
   CUSTOMER: "Customer",
 } as const;
+
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleString(undefined, {
@@ -37,6 +39,7 @@ interface TicketRepliesProps {
 function TicketReplies({ ticketId }: TicketRepliesProps) {
   const queryClient = useQueryClient();
   const [content, setContent] = useState("");
+  const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
 
   // Re-uses the cache populated by TicketDetail — no extra network request
   const { data: ticket } = useQuery({
@@ -59,11 +62,18 @@ function TicketReplies({ ticketId }: TicketRepliesProps) {
   });
 
   const replyMutation = useMutation({
-    mutationFn: (content: string) =>
-      axios.post(`${API_URL}/api/tickets/${ticketId}/comments`, { content }, { withCredentials: true }),
+    mutationFn: () => {
+      const fd = new FormData();
+      fd.append("content", content);
+      for (const file of attachmentFiles) {
+        fd.append("attachments", file);
+      }
+      return axios.post(`${API_URL}/api/tickets/${ticketId}/comments`, fd, { withCredentials: true });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["comments", ticketId] });
       setContent("");
+      setAttachmentFiles([]);
     },
   });
 
@@ -95,6 +105,24 @@ function TicketReplies({ ticketId }: TicketRepliesProps) {
               <span className="text-xs text-muted-foreground">{formatDate(ticket.createdAt)}</span>
             </div>
             <p className="text-sm whitespace-pre-wrap">{ticket.description}</p>
+            {ticket.attachments && ticket.attachments.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {ticket.attachments.map((att) => (
+                  <a
+                    key={att.id}
+                    href={att.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={att.filename}
+                    className="group relative block w-20 h-20 rounded-lg overflow-hidden border border-gray-200 hover:border-orange-400 transition-colors"
+                  >
+                    <img src={att.url} alt={att.filename} className="w-full h-full object-cover" loading="lazy" />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+                    <p className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-[10px] px-1 py-0.5 truncate">{att.filename}</p>
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
         ) : (
           <Skeleton className="h-20 w-full" />
@@ -120,6 +148,23 @@ function TicketReplies({ ticketId }: TicketRepliesProps) {
               <span className="text-xs text-muted-foreground">{formatDate(c.createdAt)}</span>
             </div>
             <p className="text-sm whitespace-pre-wrap">{c.content}</p>
+            {c.attachments && c.attachments.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {c.attachments.map((att) => (
+                  <a
+                    key={att.id}
+                    href={att.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group relative block w-16 h-16 rounded overflow-hidden border border-gray-200 hover:border-orange-400 transition-colors"
+                    title={att.filename}
+                  >
+                    <img src={att.url} alt={att.filename} className="w-full h-full object-cover" loading="lazy" />
+                    <p className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-[10px] px-1 truncate">{att.filename}</p>
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -134,6 +179,7 @@ function TicketReplies({ ticketId }: TicketRepliesProps) {
           rows={3}
           disabled={replyMutation.isPending}
         />
+        <ImageUploadField files={attachmentFiles} onChange={setAttachmentFiles} />
         <div className="flex items-center gap-2">
           <Button
             size="sm"
@@ -145,7 +191,7 @@ function TicketReplies({ ticketId }: TicketRepliesProps) {
           </Button>
           <Button
             size="sm"
-            onClick={() => replyMutation.mutate(content)}
+            onClick={() => replyMutation.mutate()}
             disabled={replyMutation.isPending || content.trim() === ""}
           >
             {replyMutation.isPending ? "Posting…" : "Post Reply"}

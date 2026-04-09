@@ -36,12 +36,13 @@ const BASE_TICKET: ApiTicket = {
   description: "Users on floor 3 cannot reach the internal wiki.",
   type:        TICKET_TYPE.SUPPORT,
   priority:    PRIORITY.HIGH,
-  status:      STATUS.OPEN,
+  status:      STATUS.OPEN_NOT_STARTED,
   project:     "Email Intake",
   assignedTo:  null,
   createdBy:   { id: "admin-id", name: "Admin" },
   createdAt:   "2026-04-01T10:00:00.000Z",
   updatedAt:   "2026-04-01T10:00:00.000Z",
+  attachments: [],
 };
 
 const ASSIGNED_TICKET: ApiTicket = {
@@ -155,10 +156,10 @@ describe("TicketDetail — ticket data rendering", () => {
     expect(screen.getByText("High")).toBeInTheDocument();
   });
 
-  it("shows the status badge (Open)", async () => {
+  it("shows the status badge (Not Started)", async () => {
     renderDetail();
     await screen.findByText("TKT-0001");
-    expect(screen.getAllByText("Open").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Not Started").length).toBeGreaterThanOrEqual(1);
   });
 
   it("shows Project label + value (Email Intake)", async () => {
@@ -232,28 +233,28 @@ describe("TicketDetail — assignee display", () => {
 describe("TicketDetail — status mutation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    setupGetSuccess(BASE_TICKET); // STATUS.OPEN
+    setupGetSuccess(BASE_TICKET); // STATUS.OPEN_NOT_STARTED
   });
 
   it("Status trigger shows the current status label", async () => {
     renderDetail();
     await screen.findByText("TKT-0001");
     const statusRow = screen.getByText("Status").closest("div")!;
-    expect(statusRow).toHaveTextContent("Open");
+    expect(statusRow).toHaveTextContent("Not Started");
   });
 
   it("clicking a status option calls PATCH /status with the new value", async () => {
     mockedAxios.patch = vi.fn().mockResolvedValue({
-      data: { ...BASE_TICKET, status: "IN_PROGRESS" },
+      data: { ...BASE_TICKET, status: "OPEN_IN_PROGRESS" },
     });
 
     renderDetail();
     await screen.findByText("TKT-0001");
 
-    // Find the Status trigger — the one containing "Open" (from the EnumSelect)
+    // Find the Status trigger — the one containing "Not Started" (from the EnumSelect)
     const triggers = document.querySelectorAll('[data-slot="select-trigger"]');
     const statusTrigger = Array.from(triggers).find((t) =>
-      t.textContent?.includes("Open")
+      t.textContent?.includes("Not Started")
     ) as HTMLElement;
     await userEvent.click(statusTrigger);
 
@@ -266,7 +267,7 @@ describe("TicketDetail — status mutation", () => {
     await waitFor(() => {
       expect(mockedAxios.patch).toHaveBeenCalledWith(
         expect.stringContaining("/api/tickets/TKT-0001/status"),
-        { status: "IN_PROGRESS" },
+        { status: "OPEN_IN_PROGRESS" },
         expect.any(Object)
       );
     });
@@ -280,15 +281,15 @@ describe("TicketDetail — status mutation", () => {
 
     const triggers = document.querySelectorAll('[data-slot="select-trigger"]');
     const statusTrigger = Array.from(triggers).find((t) =>
-      t.textContent?.includes("Open")
+      t.textContent?.includes("Not Started")
     ) as HTMLElement;
     await userEvent.click(statusTrigger);
 
     const items = document.querySelectorAll('[data-slot="select-item"]');
-    const resolvedItem = Array.from(items).find((i) =>
-      i.textContent?.includes("Resolved")
+    const doneItem = Array.from(items).find((i) =>
+      i.textContent?.includes("Done")
     ) as HTMLElement;
-    await userEvent.click(resolvedItem);
+    await userEvent.click(doneItem);
 
     await waitFor(() => {
       expect(screen.getByText(/failed to update status/i)).toBeInTheDocument();

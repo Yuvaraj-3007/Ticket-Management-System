@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, Inbox, Users } from "lucide-react";
+import { LayoutDashboard, Inbox, Users, BarChart2 } from "lucide-react";
 import { useSession } from "@/lib/auth-client";
 import { ROLES, type UserRole } from "@tms/core";
 
@@ -9,10 +9,16 @@ const NAV_ITEMS = [
 ];
 
 const ADMIN_ITEMS = [
-  { path: "/users", label: "Users", icon: Users, exact: false },
+  { path: "/users",     label: "Users",     icon: Users,     exact: false },
+  { path: "/analytics", label: "Analytics", icon: BarChart2, exact: false },
 ];
 
-export default function Sidebar() {
+interface SidebarProps {
+  open?: boolean;
+  onClose?: () => void;
+}
+
+export default function Sidebar({ open = false, onClose }: SidebarProps) {
   const location = useLocation();
   const { data: session } = useSession();
   const isAdmin = (session?.user as { role: UserRole } | undefined)?.role === ROLES.ADMIN;
@@ -26,15 +32,17 @@ export default function Sidebar() {
 
   return (
     <aside
+      className={[
+        "fixed md:sticky top-[56px] left-0 z-40 md:z-auto",
+        "h-[calc(100vh-56px)] overflow-y-auto",
+        "transition-transform duration-300 ease-in-out",
+        open ? "translate-x-0" : "-translate-x-full md:translate-x-0",
+      ].join(" ")}
       style={{
         width:          "220px",
         flexShrink:     0,
         background:     "var(--rt-surface)",
         borderRight:    "1px solid var(--rt-border)",
-        position:       "sticky",
-        top:            "56px",
-        height:         "calc(100vh - 56px)",
-        overflowY:      "auto",
         padding:        "12px 10px",
         display:        "flex",
         flexDirection:  "column",
@@ -47,6 +55,7 @@ export default function Sidebar() {
           <Link
             key={path}
             to={path}
+            onClick={onClose}
             style={{
               display:        "flex",
               alignItems:     "center",

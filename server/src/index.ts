@@ -1,5 +1,7 @@
 import * as Sentry from "@sentry/node";
 import http from "http";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -10,6 +12,8 @@ import { auth } from "./lib/auth.js";
 import userRoutes from "./routes/users.js";
 import ticketRoutes from "./routes/tickets.js";
 import webhookRoutes from "./routes/webhooks.js";
+import portalRoutes from "./routes/portal.js";
+import analyticsRoutes from "./routes/analytics.js";
 import { requireWebhookSecret } from "./middleware/webhook.js";
 import boss from "./lib/boss.js";
 import { registerClassifyWorker } from "./workers/classify.js";
@@ -55,6 +59,17 @@ if (process.env.NODE_ENV === "production" && !process.env.MOONSHOT_API_KEY) {
 if (!process.env.MOONSHOT_API_KEY) {
   console.warn("WARNING: MOONSHOT_API_KEY is not set — AI polish will return 503.");
 }
+
+// Guard: refuse to start in production without HRMS credentials
+if (process.env.NODE_ENV === "production" &&
+    (!process.env.HRMS_API_URL || !process.env.HRMS_API_EMAIL || !process.env.HRMS_API_PASSWORD)) {
+  console.error("FATAL: HRMS_API_URL, HRMS_API_EMAIL, and HRMS_API_PASSWORD must be set in production. Exiting.");
+  process.exit(1);
+}
+if (!process.env.HRMS_API_URL) {
+  console.warn("WARNING: HRMS_API_URL not set — HRMS integration disabled (dev fallback active).");
+}
+
 if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
   console.warn("WARNING: GMAIL_USER / GMAIL_APP_PASSWORD not set — outbound reply emails will be skipped.");
 }
@@ -69,7 +84,20 @@ const PORT = process.env.PORT || 5000;
 app.set("trust proxy", 1);
 
 // Security headers
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc:     ["'self'"],
+      scriptSrc:      ["'self'"],
+      styleSrc:       ["'self'", "'unsafe-inline'"],
+      imgSrc:         ["'self'", "data:", "blob:"],
+      connectSrc:     ["'self'"],
+      fontSrc:        ["'self'", "data:"],
+      objectSrc:      ["'none'"],
+      frameAncestors: ["'none'"],
+    },
+  },
+}));
 
 // CORS
 app.use(cors({
@@ -79,6 +107,15 @@ app.use(cors({
 
 app.use(express.json({ limit: "50kb" }));
 app.use(express.urlencoded({ extended: true, limit: "50kb" }));
+
+// Serve uploaded attachments as static files
+// Force download + nosniff to prevent stored XSS via HTML/SVG files rendered inline
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+app.use("/uploads", (_req, res, next) => {
+  res.setHeader("Content-Disposition", "attachment");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  next();
+}, express.static(path.resolve(__dirname, "../../uploads")));
 
 // General API rate limit — applied in all environments (stricter in production)
 const isProd = process.env.NODE_ENV === "production";
@@ -99,6 +136,8 @@ app.get("/api/health", (_req, res) => {
 // API routes
 app.use("/api/users", userRoutes);
 app.use("/api/tickets", ticketRoutes);
+app.use("/api/portal", portalRoutes);
+app.use("/api/analytics", analyticsRoutes);
 const webhookLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: isProd ? 20 : 100,
@@ -162,6 +201,11 @@ if (process.env.NODE_ENV !== "test") {
   }
   startImapWithRetry();
   === end IMAP startup === */
+}
+
+// H-3 — warn in all environments when WEBHOOK_SECRET is absent
+if (!process.env.WEBHOOK_SECRET) {
+  console.warn("[startup] WARNING: WEBHOOK_SECRET is not set — /api/webhooks/email accepts unauthenticated requests");
 }
 
 server.listen(PORT, () => {

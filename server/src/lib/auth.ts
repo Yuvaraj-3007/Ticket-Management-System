@@ -14,13 +14,21 @@ export const auth = betterAuth({
     minPasswordLength: 8,
     maxPasswordLength: 128,
     disableSignUp: true,
+    sendResetPassword: async ({ user, url }) => {
+      const { sendPasswordResetEmail } = await import("./mailer.js");
+      await sendPasswordResetEmail({
+        to:       user.email,
+        name:     user.name,
+        resetUrl: url,
+      });
+    },
   },
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days
     updateAge: 60 * 60 * 24, // refresh daily
   },
   rateLimit: {
-    enabled: isProd,  // only enforce in production — tests call loginAsAdmin many times
+    enabled: process.env.NODE_ENV !== "test",  // enforce in dev too — disabled only in test
     window: 60,       // 1 minute window
     max: 10,          // max 10 attempts per window
     storage: "memory",

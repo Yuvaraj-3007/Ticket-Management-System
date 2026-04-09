@@ -74,3 +74,47 @@ export async function sendReplyEmail(opts: SendReplyEmailOptions): Promise<void>
     );
   }
 }
+
+export interface SendPasswordResetEmailOptions {
+  to:       string;
+  name:     string;
+  resetUrl: string;
+}
+
+export async function sendPasswordResetEmail(opts: SendPasswordResetEmailOptions): Promise<void> {
+  const { to, name, resetUrl } = opts;
+  if (!to) return;
+  if (!isConfigured()) {
+    console.warn("[mailer] Password reset skipped — Gmail not configured");
+    return;
+  }
+
+  const safeName = name.replace(/[\r\n]/g, " ");
+  const text = [
+    `Hi ${safeName},`,
+    "",
+    "You requested a password reset for your Right Tracker Customer Portal account.",
+    "",
+    "Click the link below to set a new password (valid for 1 hour):",
+    resetUrl,
+    "",
+    "If you did not request this, you can safely ignore this email.",
+    "",
+    "— Right Tracker Support Team",
+  ].join("\n");
+
+  try {
+    await getTransporter().sendMail({
+      from:    GMAIL_USER,
+      to,
+      subject: "Reset your Right Tracker password",
+      text,
+    });
+    console.log(`[mailer] Password reset email sent to ${to}`);
+  } catch (err) {
+    console.error(
+      "[mailer] Failed to send password reset email:",
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+}

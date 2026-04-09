@@ -96,24 +96,24 @@
     --rt-accent-bg: rgba(232,100,37,0.08);
 
     /* Status badge tokens — light (dark text for white backgrounds) */
-    --status-new-dot:         #8B5CF6;
-    --status-new-text:        #6D28D9;
-    --status-new-bg:          rgba(139,92,246,0.08);
-    --status-open-dot:        #F59E0B;
-    --status-open-text:       #92400E;
-    --status-open-bg:         rgba(245,158,11,0.10);
-    --status-in-progress-dot: #0EA5E9;
-    --status-in-progress-text:#0369A1;
-    --status-in-progress-bg:  rgba(14,165,233,0.10);
-    --status-processing-dot:  #6366F1;
-    --status-processing-text: #3730A3;
-    --status-processing-bg:   rgba(99,102,241,0.10);
-    --status-resolved-dot:    #10B981;
-    --status-resolved-text:   #065F46;
-    --status-resolved-bg:     rgba(16,185,129,0.10);
-    --status-closed-dot:      #94A3B8;
-    --status-closed-text:     #475569;
-    --status-closed-bg:       rgba(100,116,139,0.08);
+    --status-un-assigned-dot:       #6B7280;
+    --status-un-assigned-text:      #374151;
+    --status-un-assigned-bg:        rgba(107,114,128,0.10);
+    --status-open-not-started-dot:  #F59E0B;
+    --status-open-not-started-text: #92400E;
+    --status-open-not-started-bg:   rgba(245,158,11,0.10);
+    --status-open-in-progress-dot:  #3B82F6;
+    --status-open-in-progress-text: #1D4ED8;
+    --status-open-in-progress-bg:   rgba(59,130,246,0.10);
+    --status-open-qa-dot:           #8B5CF6;
+    --status-open-qa-text:          #6D28D9;
+    --status-open-qa-bg:            rgba(139,92,246,0.10);
+    --status-open-done-dot:         #14B8A6;
+    --status-open-done-text:        #0F766E;
+    --status-open-done-bg:          rgba(20,184,166,0.10);
+    --status-closed-dot:            #22C55E;
+    --status-closed-text:           #15803D;
+    --status-closed-bg:             rgba(34,197,94,0.10);
 }
 
 .dark {
@@ -163,24 +163,24 @@
     --rt-accent-bg: rgba(255,122,61,0.08);
 
     /* Status badge tokens — dark (bright text for dark backgrounds) */
-    --status-new-dot:         #A78BFA;
-    --status-new-text:        #C4B5FD;
-    --status-new-bg:          rgba(139,92,246,0.10);
-    --status-open-dot:        #FBBF24;
-    --status-open-text:       #FCD34D;
-    --status-open-bg:         rgba(251,191,36,0.10);
-    --status-in-progress-dot: #38BDF8;
-    --status-in-progress-text:#7DD3FC;
-    --status-in-progress-bg:  rgba(56,189,248,0.10);
-    --status-processing-dot:  #818CF8;
-    --status-processing-text: #A5B4FC;
-    --status-processing-bg:   rgba(129,140,248,0.10);
-    --status-resolved-dot:    #34D399;
-    --status-resolved-text:   #6EE7B7;
-    --status-resolved-bg:     rgba(52,211,153,0.10);
-    --status-closed-dot:      #94A3B8;
-    --status-closed-text:     #CBD5E1;
-    --status-closed-bg:       rgba(100,116,139,0.08);
+    --status-un-assigned-dot:       #9CA3AF;
+    --status-un-assigned-text:      #D1D5DB;
+    --status-un-assigned-bg:        rgba(156,163,175,0.10);
+    --status-open-not-started-dot:  #FBBF24;
+    --status-open-not-started-text: #FCD34D;
+    --status-open-not-started-bg:   rgba(251,191,36,0.10);
+    --status-open-in-progress-dot:  #60A5FA;
+    --status-open-in-progress-text: #93C5FD;
+    --status-open-in-progress-bg:   rgba(96,165,250,0.10);
+    --status-open-qa-dot:           #A78BFA;
+    --status-open-qa-text:          #C4B5FD;
+    --status-open-qa-bg:            rgba(167,139,250,0.10);
+    --status-open-done-dot:         #2DD4BF;
+    --status-open-done-text:        #5EEAD4;
+    --status-open-done-bg:          rgba(45,212,191,0.10);
+    --status-closed-dot:            #4ADE80;
+    --status-closed-text:           #86EFAC;
+    --status-closed-bg:             rgba(74,222,128,0.10);
 }
 
 @layer base {

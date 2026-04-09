@@ -47,12 +47,12 @@ const API_URL = import.meta.env.VITE_API_URL || "";
 
 // CSS variables handle light/dark automatically — defined in index.css
 const STATUS_CONFIG: Record<string, { dot: string; text: string; bg: string }> = {
-  NEW:         { dot: "var(--status-new-dot)",         text: "var(--status-new-text)",         bg: "var(--status-new-bg)"         },
-  OPEN:        { dot: "var(--status-open-dot)",        text: "var(--status-open-text)",        bg: "var(--status-open-bg)"        },
-  IN_PROGRESS: { dot: "var(--status-in-progress-dot)", text: "var(--status-in-progress-text)", bg: "var(--status-in-progress-bg)" },
-  PROCESSING:  { dot: "var(--status-processing-dot)",  text: "var(--status-processing-text)",  bg: "var(--status-processing-bg)"  },
-  RESOLVED:    { dot: "var(--status-resolved-dot)",    text: "var(--status-resolved-text)",    bg: "var(--status-resolved-bg)"    },
-  CLOSED:      { dot: "var(--status-closed-dot)",      text: "var(--status-closed-text)",      bg: "var(--status-closed-bg)"      },
+  UN_ASSIGNED:      { dot: "var(--status-un-assigned-dot)",       text: "var(--status-un-assigned-text)",       bg: "var(--status-un-assigned-bg)"       },
+  OPEN_NOT_STARTED: { dot: "var(--status-open-not-started-dot)",  text: "var(--status-open-not-started-text)",  bg: "var(--status-open-not-started-bg)"  },
+  OPEN_IN_PROGRESS: { dot: "var(--status-open-in-progress-dot)",  text: "var(--status-open-in-progress-text)",  bg: "var(--status-open-in-progress-bg)"  },
+  OPEN_QA:          { dot: "var(--status-open-qa-dot)",           text: "var(--status-open-qa-text)",           bg: "var(--status-open-qa-bg)"           },
+  OPEN_DONE:        { dot: "var(--status-open-done-dot)",         text: "var(--status-open-done-text)",         bg: "var(--status-open-done-bg)"         },
+  CLOSED:           { dot: "var(--status-closed-dot)",            text: "var(--status-closed-text)",            bg: "var(--status-closed-bg)"            },
 };
 
 const PRIORITY_CONFIG: Record<string, { bar: string; textDark: string; textLight: string }> = {
@@ -224,6 +224,10 @@ function Tickets() {
   const [statusFilter, setStatusFilter]     = useState<StatusValue | "">("");
   const [priorityFilter, setPriorityFilter] = useState<PriorityValue | "">("");
   const [typeFilter, setTypeFilter]         = useState<TicketTypeValue | "">("");
+  const [assigneeFilter, setAssigneeFilter] = useState("");
+  const [clientFilter,  setClientFilter]   = useState("");
+  const [dateFrom, setDateFrom]             = useState("");
+  const [dateTo, setDateTo]                 = useState("");
 
   useEffect(() => {
     const t = setTimeout(() => setSearch(searchInput.trim()), 300);
@@ -232,18 +236,38 @@ function Tickets() {
 
   useEffect(() => {
     setPagination((p) => ({ ...p, pageIndex: 0 }));
-  }, [search, statusFilter, priorityFilter, typeFilter]);
+  }, [search, statusFilter, priorityFilter, typeFilter, assigneeFilter, clientFilter, dateFrom, dateTo]);
 
   const hasFilters =
-    search !== "" || statusFilter !== "" || priorityFilter !== "" || typeFilter !== "";
+    search !== "" || statusFilter !== "" || priorityFilter !== "" || typeFilter !== "" ||
+    assigneeFilter !== "" || clientFilter !== "" || dateFrom !== "" || dateTo !== "";
 
   function clearFilters() {
     setSearchInput(""); setSearch("");
     setStatusFilter(""); setPriorityFilter(""); setTypeFilter("");
+    setAssigneeFilter(""); setClientFilter(""); setDateFrom(""); setDateTo("");
   }
 
+  const { data: agentUsers = [] } = useQuery({
+    queryKey: ["assignable-users-all"],
+    queryFn: async () => {
+      const res = await axios.get(`${API_URL}/api/tickets/assignable-users`, { withCredentials: true });
+      return res.data as Array<{ id: string; name: string }>;
+    },
+    staleTime: 60_000,
+  });
+
+  const { data: clientList = [] } = useQuery({
+    queryKey: ["ticket-clients"],
+    queryFn: async () => {
+      const res = await axios.get(`${API_URL}/api/tickets/clients`, { withCredentials: true });
+      return res.data as Array<{ id: string; name: string }>;
+    },
+    staleTime: 5 * 60_000,
+  });
+
   const { data: result, isLoading, isError } = useQuery({
-    queryKey: ["tickets", sorting, pagination, search, statusFilter, priorityFilter, typeFilter],
+    queryKey: ["tickets", sorting, pagination, search, statusFilter, priorityFilter, typeFilter, assigneeFilter, clientFilter, dateFrom, dateTo],
     queryFn: async () => {
       const sortCol = sorting[0]?.id ?? "createdAt";
       const sortDir = sorting[0]?.desc !== false ? "desc" : "asc";
@@ -252,10 +276,14 @@ function Tickets() {
         page:     String(pagination.pageIndex + 1),
         pageSize: String(pagination.pageSize),
       });
-      if (search)         params.set("search",   search);
-      if (statusFilter)   params.set("status",   statusFilter);
-      if (priorityFilter) params.set("priority", priorityFilter);
-      if (typeFilter)     params.set("type",      typeFilter);
+      if (search)         params.set("search",       search);
+      if (statusFilter)   params.set("status",       statusFilter);
+      if (priorityFilter) params.set("priority",     priorityFilter);
+      if (typeFilter)     params.set("type",          typeFilter);
+      if (assigneeFilter) params.set("assignedToId", assigneeFilter);
+      if (clientFilter)   params.set("clientId",     clientFilter);
+      if (dateFrom)       params.set("from",          dateFrom);
+      if (dateTo)         params.set("to",            dateTo);
       const res = await axios.get(`${API_URL}/api/tickets?${params}`, { withCredentials: true });
       return paginatedTicketsSchema.parse(res.data);
     },
@@ -282,13 +310,13 @@ function Tickets() {
   });
 
   return (
-    <div className="px-6 py-8">
+    <div className="px-4 sm:px-6 py-4 sm:py-8">
 
         {/* ── Page header ── */}
         <div className="mb-7">
           <div className="flex items-center gap-3">
             <h1
-              className="text-3xl font-bold tracking-tight"
+              className="text-2xl sm:text-3xl font-bold tracking-tight"
               style={{ color: "var(--rt-text-1)" }}
             >
               Tickets
@@ -348,10 +376,13 @@ function Tickets() {
               <SelectValue placeholder="All statuses" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all" className="text-xs">All statuses</SelectItem>
-              <SelectItem value="OPEN"        className="text-xs">{STATUS_LABELS["OPEN"]}</SelectItem>
-              <SelectItem value="IN_PROGRESS" className="text-xs">{STATUS_LABELS["IN_PROGRESS"]}</SelectItem>
-              <SelectItem value="CLOSED"      className="text-xs">{STATUS_LABELS["CLOSED"]}</SelectItem>
+              <SelectItem value="all"              className="text-xs">All statuses</SelectItem>
+              <SelectItem value="UN_ASSIGNED"      className="text-xs">{STATUS_LABELS["UN_ASSIGNED"]}</SelectItem>
+              <SelectItem value="OPEN_NOT_STARTED" className="text-xs">{STATUS_LABELS["OPEN_NOT_STARTED"]}</SelectItem>
+              <SelectItem value="OPEN_IN_PROGRESS" className="text-xs">{STATUS_LABELS["OPEN_IN_PROGRESS"]}</SelectItem>
+              <SelectItem value="OPEN_QA"          className="text-xs">{STATUS_LABELS["OPEN_QA"]}</SelectItem>
+              <SelectItem value="OPEN_DONE"        className="text-xs">{STATUS_LABELS["OPEN_DONE"]}</SelectItem>
+              <SelectItem value="CLOSED"           className="text-xs">{STATUS_LABELS["CLOSED"]}</SelectItem>
             </SelectContent>
           </Select>
 
@@ -405,6 +436,89 @@ function Tickets() {
             </SelectContent>
           </Select>
 
+          {/* Client filter */}
+          <Select
+            value={clientFilter}
+            onValueChange={(v) => setClientFilter(!v || v === "all" ? "" : v)}
+          >
+            <SelectTrigger
+              className="h-8 text-xs rounded-lg px-3"
+              style={{
+                width:      "160px",
+                background: "var(--rt-surface)",
+                border:     "1px solid var(--rt-border)",
+                color:      clientFilter ? "var(--rt-text-2)" : "var(--rt-text-3)",
+                boxShadow:  "none",
+              }}
+            >
+              <SelectValue placeholder="All clients" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="text-xs">All clients</SelectItem>
+              {clientList.map((c) => (
+                <SelectItem key={c.id} value={c.id} className="text-xs">{c.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Assignee filter */}
+          <Select
+            value={assigneeFilter}
+            onValueChange={(v) => setAssigneeFilter(!v || v === "all" ? "" : v)}
+          >
+            <SelectTrigger
+              className="h-8 text-xs rounded-lg px-3"
+              style={{
+                width:      "160px",
+                background: "var(--rt-surface)",
+                border:     "1px solid var(--rt-border)",
+                color:      assigneeFilter ? "var(--rt-text-2)" : "var(--rt-text-3)",
+                boxShadow:  "none",
+              }}
+            >
+              <SelectValue placeholder="All assignees" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all"        className="text-xs">All assignees</SelectItem>
+              <SelectItem value="unassigned" className="text-xs">Unassigned</SelectItem>
+              {agentUsers.map((u) => (
+                <SelectItem key={u.id} value={u.id} className="text-xs">{u.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Date range — From */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs" style={{ color: "var(--rt-text-3)" }}>From</span>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="h-8 text-xs rounded-lg px-2 outline-none"
+              style={{
+                background: "var(--rt-surface)",
+                border:     "1px solid var(--rt-border)",
+                color:      "var(--rt-text-2)",
+              }}
+            />
+          </div>
+
+          {/* Date range — To */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs" style={{ color: "var(--rt-text-3)" }}>To</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="h-8 text-xs rounded-lg px-2 outline-none"
+              style={{
+                background: "var(--rt-surface)",
+                border:     "1px solid var(--rt-border)",
+                color:      "var(--rt-text-2)",
+              }}
+            />
+          </div>
+
           {hasFilters && (
             <button
               onClick={clearFilters}
@@ -445,7 +559,7 @@ function Tickets() {
 
         {/* ── Table ── */}
         {!isError && (
-          <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--rt-border)" }}>
+          <div className="rounded-xl overflow-x-auto" style={{ border: "1px solid var(--rt-border)" }}>
             <table className="w-full" style={{ borderCollapse: "collapse", background: "var(--rt-surface)" }}>
               <thead>
                 {table.getHeaderGroups().map((hg) => (

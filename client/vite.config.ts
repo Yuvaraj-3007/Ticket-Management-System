@@ -20,6 +20,10 @@ export default defineConfig({
         target: process.env.PROXY_TARGET || process.env.VITE_PROXY_TARGET || "http://127.0.0.1:4000",
         changeOrigin: true,
       },
+      "/uploads": {
+        target: process.env.PROXY_TARGET || process.env.VITE_PROXY_TARGET || "http://127.0.0.1:4000",
+        changeOrigin: true,
+      },
     },
   },
   test: {

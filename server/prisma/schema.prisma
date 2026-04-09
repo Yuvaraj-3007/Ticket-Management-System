@@ -19,6 +19,7 @@ model User {
   image         String?
   role          String    @default("AGENT")
   isActive      Boolean   @default(true)
+  portalClientId String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -100,11 +101,11 @@ enum Priority {
 }
 
 enum Status {
-  NEW
-  OPEN
-  IN_PROGRESS
-  PROCESSING
-  RESOLVED
+  UN_ASSIGNED
+  OPEN_NOT_STARTED
+  OPEN_IN_PROGRESS
+  OPEN_QA
+  OPEN_DONE
   CLOSED
 }
 
@@ -115,10 +116,16 @@ model Ticket {
   description String
   type        TicketType
   priority    Priority   @default(MEDIUM)
-  status      Status     @default(NEW)
+  status      Status     @default(UN_ASSIGNED)
   project     String
-  senderName  String?
-  senderEmail String?
+  senderName     String?
+  senderEmail    String?
+  hrmsClientId    String?
+  hrmsClientName  String?
+  hrmsProjectId   String?
+  hrmsProjectName String?
+  rating         Int?
+  ratingText     String?
 
   assignedTo   User?   @relation("AssignedTickets", fields: [assignedToId], references: [id])
   assignedToId String?
@@ -158,6 +165,8 @@ model Comment {
 
   createdAt DateTime @default(now())
 
+  attachments Attachment[]
+
   @@map("comments")
 }
 
@@ -172,8 +181,11 @@ model Attachment {
   mimetype String
   size     Int
 
-  ticket   Ticket @relation(fields: [ticketId], references: [id])
-  ticketId String
+  ticket   Ticket?  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  ticketId String?
+
+  comment   Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  commentId String?
 
   createdAt DateTime @default(now())
 

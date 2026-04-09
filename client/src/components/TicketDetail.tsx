@@ -79,11 +79,15 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
   });
 
   const { data: assignableUsers = [] } = useQuery<AssignableUser[]>({
-    queryKey: ["assignable-users"],
+    queryKey: ["assignable-users", ticket?.hrmsProjectId ?? null],
     queryFn: async () => {
-      const res = await axios.get(`${API_URL}/api/tickets/assignable-users`, { withCredentials: true });
+      const url = ticket?.hrmsProjectId
+        ? `${API_URL}/api/tickets/assignable-users?projectId=${ticket.hrmsProjectId}`
+        : `${API_URL}/api/tickets/assignable-users`;
+      const res = await axios.get(url, { withCredentials: true });
       return assignableUsersSchema.parse(res.data);
     },
+    enabled: !!ticket,
     staleTime: 60_000,
   });
 
@@ -151,11 +155,11 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
             <Badge variant={statusVariant(ticket.status)}>{STATUS_LABELS[ticket.status]}</Badge>
           </div>
         </div>
-        <h2 className="text-2xl font-bold">{ticket.title}</h2>
+        <h2 className="text-xl sm:text-2xl font-bold">{ticket.title}</h2>
       </div>
 
       {/* Metadata grid: project, sender, status, category, assignee, date */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 border rounded-lg bg-muted/30">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-4 border rounded-lg bg-muted/30">
         <DetailRow label="Project">{ticket.project}</DetailRow>
         <DetailRow label="Created by">{ticket.createdBy.name}</DetailRow>
         <DetailRow label="Status">
@@ -185,7 +189,7 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
             value={ticket.assignedTo?.id ?? "unassigned"}
             onValueChange={(val) => assignMutation.mutate(val === "unassigned" ? null : val)}
           >
-            <SelectTrigger size="sm" className="w-[180px]" disabled={assignMutation.isPending}>
+            <SelectTrigger size="sm" className="w-full sm:w-[180px]" disabled={assignMutation.isPending}>
               {ticket.assignedTo
                 ? <span>{ticket.assignedTo.name}</span>
                 : <span className="text-muted-foreground">Unassigned</span>
@@ -239,6 +243,45 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
           </div>
         )}
       </div>
+
+      {/* Customer rating — only shown on closed tickets that have a rating */}
+      {ticket.status === "CLOSED" && ticket.rating != null && (
+        <div className="border rounded-lg p-4 bg-muted/20">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+            Customer Rating
+          </h3>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-0.5">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <svg
+                  key={i}
+                  className={`w-5 h-5 ${i < ticket.rating! ? "text-amber-400" : "text-gray-200"}`}
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                </svg>
+              ))}
+            </div>
+            <span className="text-sm font-semibold text-gray-700">{ticket.rating} / 5</span>
+          </div>
+          {ticket.ratingText && (
+            <p className="mt-2 text-sm text-muted-foreground italic border-l-2 border-amber-300 pl-3">
+              "{ticket.ratingText}"
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Closed with no rating yet */}
+      {ticket.status === "CLOSED" && ticket.rating == null && (
+        <div className="border rounded-lg p-4 bg-muted/20">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+            Customer Rating
+          </h3>
+          <p className="text-sm text-muted-foreground">No rating submitted yet.</p>
+        </div>
+      )}
     </div>
   );
 }

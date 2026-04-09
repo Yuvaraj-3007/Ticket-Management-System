@@ -8,10 +8,13 @@ export const USER_ROLES = ["ADMIN", "AGENT"] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
 // Named role constants — use these instead of string literals
+// Note: CUSTOMER is a valid portal role but is intentionally excluded from the
+// internal USER_ROLES tuple (which governs admin/agent management screens).
 export const ROLES = {
-  ADMIN: "ADMIN",
-  AGENT: "AGENT",
-} as const satisfies Record<string, UserRole>;
+  ADMIN:    "ADMIN",
+  AGENT:    "AGENT",
+  CUSTOMER: "CUSTOMER",
+} as const;
 
 // ──────────────────────────────────────
 // API response schema
@@ -24,7 +27,8 @@ export const apiUserSchema = z.object({
   email: z.string().email(),
   role: z.enum(USER_ROLES),
   isActive: z.boolean(),
-  createdAt: z.string(),
+  createdAt: z.string().nullable(),
+  source: z.enum(["TMS", "HRMS"]).default("TMS"),
 });
 
 export const apiUsersSchema = z.array(apiUserSchema);

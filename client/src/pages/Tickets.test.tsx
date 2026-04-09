@@ -33,12 +33,13 @@ const TICKET_1: ApiTicket = {
   description: "From: Alice <alice@example.com>\n\nAfter logging in the dashboard throws a JS error.",
   type:        TICKET_TYPE.SUPPORT,
   priority:    PRIORITY.MEDIUM,
-  status:      STATUS.OPEN,
+  status:      STATUS.OPEN_NOT_STARTED,
   project:     "Email Intake",
   assignedTo:  null,
   createdBy:   { id: "admin-id", name: "Admin" },
   createdAt:   "2026-04-01T10:00:00.000Z",
   updatedAt:   "2026-04-01T10:00:00.000Z",
+  attachments: [],
 };
 
 const TICKET_2: ApiTicket = {
@@ -75,7 +76,16 @@ function makePage(tickets: ApiTicket[]) {
 }
 
 async function resolveWithTickets(tickets: ApiTicket[]) {
-  mockedGet.mockResolvedValueOnce({ data: makePage(tickets) });
+  // The component now fires two concurrent queries:
+  //   1. /api/tickets/assignable-users  (assignee dropdown)
+  //   2. /api/tickets?...               (ticket list)
+  // mockResolvedValue (persistent) covers both calls in any order.
+  mockedGet.mockImplementation((url: string) => {
+    if (typeof url === "string" && url.includes("assignable-users")) {
+      return Promise.resolve({ data: [] });
+    }
+    return Promise.resolve({ data: makePage(tickets) });
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -170,12 +180,12 @@ describe("Tickets page — component", () => {
     expect(within(row).getByText("Support")).toBeInTheDocument();
   });
 
-  it("shows Status badge with correct label: Open", async () => {
+  it("shows Status badge with correct label: Not Started", async () => {
     await resolveWithTickets([TICKET_1]);
     renderTickets();
     await screen.findByText("Dashboard crashes on login");
     const row = screen.getByRole("row", { name: /Dashboard crashes on login/i });
-    expect(within(row).getByText("Open")).toBeInTheDocument();
+    expect(within(row).getByText("Not Started")).toBeInTheDocument();
   });
 
   // ─── Ordering ─────────────────────────────────────────────────────────────
@@ -203,7 +213,12 @@ describe("Tickets page — component", () => {
   // ─── Error state ──────────────────────────────────────────────────────────
 
   it("shows error message when the API call fails", async () => {
-    mockedGet.mockRejectedValueOnce(new Error("Network error"));
+    mockedGet.mockImplementation((url: string) => {
+      if (typeof url === "string" && url.includes("assignable-users")) {
+        return Promise.resolve({ data: [] });
+      }
+      return Promise.reject(new Error("Network error"));
+    });
     renderTickets();
     expect(await screen.findByText(/failed to load tickets/i)).toBeInTheDocument();
   });
@@ -211,7 +226,12 @@ describe("Tickets page — component", () => {
   // ─── Loading state ────────────────────────────────────────────────────────
 
   it("shows skeleton rows while loading", () => {
-    mockedGet.mockReturnValueOnce(new Promise(() => {})); // never resolves
+    mockedGet.mockImplementation((url: string) => {
+      if (typeof url === "string" && url.includes("assignable-users")) {
+        return Promise.resolve({ data: [] });
+      }
+      return new Promise(() => {}); // never resolves — keeps the tickets query loading
+    });
     renderTickets();
     expect(screen.getByRole("columnheader", { name: "Subject" })).toBeInTheDocument();
   });
@@ -222,7 +242,12 @@ describe("Tickets page — component", () => {
 describe("Tickets page — sorting", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockedGet.mockResolvedValue({ data: makePage([TICKET_1]) });
+    mockedGet.mockImplementation((url: string) => {
+      if (typeof url === "string" && url.includes("assignable-users")) {
+        return Promise.resolve({ data: [] });
+      }
+      return Promise.resolve({ data: makePage([TICKET_1]) });
+    });
   });
 
   it("initial fetch sends sortBy=createdAt&sortOrder=desc", async () => {

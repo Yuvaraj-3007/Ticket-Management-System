@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import multer from "multer";
 import { inboundEmailSchema, TICKET_TYPE, PRIORITY, STATUS, ROLES } from "@tms/core";
 import prisma from "../lib/prisma.js";
@@ -20,6 +20,7 @@ async function createTicketFromEmail(
   subject: string,
   body: string,
   project?: string,
+  hrmsClientId?: string,
 ): Promise<{ ticket: { id: string; ticketId: string }; admin: { id: string }; from: string; name: string | undefined; subject: string; body: string }> {
   const [admin, aiAgent] = await Promise.all([
     prisma.user.findFirst({ where: { role: ROLES.ADMIN } }),
@@ -40,8 +41,10 @@ async function createTicketFromEmail(
     }
 
     const ticketId = `TKT-${String(nextNumber).padStart(4, "0")}`;
-    const description = name
-      ? `From: ${name} <${from}>\n\n${body}`
+    // M-1 — strip CRLF from name to prevent header injection if description is used in email context
+    const safeName    = name ? name.replace(/[\r\n]/g, " ") : undefined;
+    const description = safeName
+      ? `From: ${safeName} <${from}>\n\n${body}`
       : `From: ${from}\n\n${body}`;
 
     return tx.ticket.create({
@@ -52,10 +55,11 @@ async function createTicketFromEmail(
         description,
         type:        TICKET_TYPE.SUPPORT,
         priority:    PRIORITY.MEDIUM,
-        status:      process.env.NODE_ENV === "test" ? STATUS.OPEN : STATUS.NEW,
-        project:     project ?? "General",
-        senderName:  name ?? null,
-        senderEmail: from,
+        status:      STATUS.UN_ASSIGNED,
+        project:      project ?? "General",
+        hrmsClientId: hrmsClientId ?? null,
+        senderName:   name ?? null,
+        senderEmail:  from,
         createdById:  admin.id,
         assignedToId: aiAgent?.id ?? null,
       },
@@ -75,11 +79,11 @@ router.post("/email", async (req, res) => {
     return;
   }
 
-  const { from, name, subject, body, project } = result.data;
+  const { from, name, subject, body, project, hrmsClientId } = result.data;
 
   let created: Awaited<ReturnType<typeof createTicketFromEmail>>;
   try {
-    created = await createTicketFromEmail(from, name, subject, body, project);
+    created = await createTicketFromEmail(from, name, subject, body, project, hrmsClientId);
   } catch {
     res.status(500).json({ error: "No admin user found to assign as ticket creator" });
     return;
@@ -208,7 +212,7 @@ export async function processImapEmail(data: EmailData): Promise<void> {
         // Re-open the ticket and bump updatedAt so it surfaces at top of list
         await prisma.ticket.update({
           where: { id: existingTicket.id },
-          data:  { status: STATUS.OPEN, updatedAt: new Date() },
+          data:  { status: STATUS.OPEN_NOT_STARTED, updatedAt: new Date() },
         });
         console.log("[imap] Added customer reply to existing ticket %s from %s", refTicketId, from);
       }
@@ -247,8 +251,13 @@ let gmailProcessing = false;
 router.post("/gmail", async (req, res) => {
   // Optional shared secret verification
   if (process.env.GMAIL_PUBSUB_SECRET) {
-    const token = (req.headers["x-goog-channel-token"] as string | undefined) ?? (req.query["token"] as string | undefined);
-    if (token !== process.env.GMAIL_PUBSUB_SECRET) {
+    const secret = process.env.GMAIL_PUBSUB_SECRET;
+    const token  = (req.headers["x-goog-channel-token"] as string | undefined) ?? (req.query["token"] as string | undefined);
+    // H-4 — timing-safe comparison to prevent secret enumeration via timing oracle
+    const valid  = token != null &&
+      Buffer.byteLength(token) === Buffer.byteLength(secret) &&
+      timingSafeEqual(Buffer.from(token, "utf8"), Buffer.from(secret, "utf8"));
+    if (!valid) {
       res.status(403).json({ error: "Forbidden" });
       return;
     }
@@ -345,7 +354,7 @@ router.post("/gmail", async (req, res) => {
             // Re-open the ticket and bump updatedAt so it surfaces at top of list
             await prisma.ticket.update({
               where: { id: existingTicket.id },
-              data:  { status: STATUS.OPEN, updatedAt: new Date() },
+              data:  { status: STATUS.OPEN_NOT_STARTED, updatedAt: new Date() },
             });
             console.log("[gmail] Added customer reply to existing ticket %s from %s", refTicketId, from);
           }

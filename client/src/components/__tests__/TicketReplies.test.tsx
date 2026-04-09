@@ -19,19 +19,21 @@ const mockedAxios = vi.mocked(axios);
 // ---------------------------------------------------------------------------
 
 const AGENT_COMMENT: ApiComment = {
-  id:         "c-1",
-  content:    "This is an agent reply.",
-  senderType: "AGENT",
-  author:     { id: "user-1", name: "Alice Agent" },
-  createdAt:  "2026-04-01T10:00:00.000Z",
+  id:          "c-1",
+  content:     "This is an agent reply.",
+  senderType:  "AGENT",
+  author:      { id: "user-1", name: "Alice Agent" },
+  createdAt:   "2026-04-01T10:00:00.000Z",
+  attachments: [],
 };
 
 const CUSTOMER_COMMENT: ApiComment = {
-  id:         "c-2",
-  content:    "This is a customer reply.",
-  senderType: "CUSTOMER",
-  author:     { id: "user-2", name: "John Customer" },
-  createdAt:  "2026-04-01T11:00:00.000Z",
+  id:          "c-2",
+  content:     "This is a customer reply.",
+  senderType:  "CUSTOMER",
+  author:      { id: "user-2", name: "John Customer" },
+  createdAt:   "2026-04-01T11:00:00.000Z",
+  attachments: [],
 };
 
 // ---------------------------------------------------------------------------

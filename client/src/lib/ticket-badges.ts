@@ -17,9 +17,9 @@ export function priorityVariant(p: ApiTicket["priority"]): BadgeVariant {
 }
 
 export function statusVariant(s: ApiTicket["status"]): BadgeVariant {
-  if (s === STATUS.OPEN || s === STATUS.IN_PROGRESS) return "default";
-  if (s === STATUS.NEW || s === STATUS.PROCESSING)   return "secondary";
-  if (s === STATUS.RESOLVED)                         return "outline";
+  if (s === STATUS.OPEN_IN_PROGRESS || s === STATUS.OPEN_QA) return "default";
+  if (s === STATUS.UN_ASSIGNED || s === STATUS.OPEN_NOT_STARTED) return "secondary";
+  if (s === STATUS.OPEN_DONE) return "outline";
   return "outline";
 }
 
@@ -44,10 +44,10 @@ export const PRIORITY_LABELS: Record<PriorityValue, string> = {
 };
 
 export const STATUS_LABELS: Record<StatusValue, string> = {
-  [STATUS.NEW]:         "New",
-  [STATUS.OPEN]:        "Open",
-  [STATUS.IN_PROGRESS]: "In Progress",
-  [STATUS.PROCESSING]:  "Processing",
-  [STATUS.RESOLVED]:    "Resolved",
-  [STATUS.CLOSED]:      "Closed",
+  [STATUS.UN_ASSIGNED]:      "Un-Assigned",
+  [STATUS.OPEN_NOT_STARTED]: "Not Started",
+  [STATUS.OPEN_IN_PROGRESS]: "In Progress",
+  [STATUS.OPEN_QA]:          "QA",
+  [STATUS.OPEN_DONE]:        "Done",
+  [STATUS.CLOSED]:           "Closed",
 };

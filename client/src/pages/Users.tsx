@@ -136,6 +136,7 @@ function Users() {
   };
 
   const openEditDialog = (user: ApiUser) => {
+    if (user.source === "HRMS") return;
     setEditingUser(user);
     setDialogError("");
     form.reset({
@@ -167,7 +168,7 @@ function Users() {
 
   if (isLoading) {
     return (
-      <div className="px-6 py-8">
+      <div className="px-4 sm:px-6 py-6 sm:py-8">
           <div className="flex items-center justify-between mb-6">
             <div className="space-y-2">
               <Skeleton className="h-6 w-48" />
@@ -223,7 +224,7 @@ function Users() {
 
   if (isError) {
     return (
-      <div className="px-6 py-8">
+      <div className="px-4 sm:px-6 py-6 sm:py-8">
         <div className="bg-destructive/10 text-destructive text-sm p-4 rounded-md">
           Failed to load users. Please refresh the page.
         </div>
@@ -232,10 +233,10 @@ function Users() {
   }
 
   return (
-    <div className="px-6 py-8">
+    <div className="px-4 sm:px-6 py-6 sm:py-8">
         <div className="flex items-start justify-between mb-7">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight" style={{ color: "var(--rt-text-1)" }}>Users</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ color: "var(--rt-text-1)" }}>Users</h1>
             <p className="mt-1 text-sm" style={{ color: "var(--rt-text-3)" }}>Manage team members and their access roles</p>
           </div>
           <Button onClick={openCreateDialog} style={{ background: "var(--rt-accent)", color: "#fff" }}>Add User</Button>
@@ -254,6 +255,7 @@ function Users() {
         )}
 
         <div className="border rounded-lg overflow-hidden" style={{ background: "#ffffff" }}>
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader style={{ background: "#f9fafb" }}>
               <TableRow>
@@ -276,62 +278,82 @@ function Users() {
                   </TableCell>
                 </TableRow>
               ) : (
-                users.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell className="font-medium">{user.name}</TableCell>
-                    <TableCell>{user.email}</TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={user.role === ROLES.ADMIN ? "default" : "secondary"}
-                      >
-                        {user.role}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={user.isActive ? "default" : "destructive"}
-                      >
-                        {user.isActive ? "Active" : "Inactive"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {new Date(user.createdAt).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell className="text-right space-x-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openEditDialog(user)}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        variant={user.isActive ? "destructive" : "outline"}
-                        size="sm"
-                        disabled={
-                          toggleStatusMutation.isPending &&
+                users.map((user) =>
+                  user.source === "HRMS" ? (
+                    <TableRow key={user.id}>
+                      <TableCell className="font-medium">{user.name}</TableCell>
+                      <TableCell>{user.email}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">{ROLES.AGENT}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="default">Active</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-xs">HRMS</Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="text-xs text-muted-foreground">HRMS Employee</span>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    <TableRow key={user.id}>
+                      <TableCell className="font-medium">{user.name}</TableCell>
+                      <TableCell>{user.email}</TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={user.role === ROLES.ADMIN ? "default" : "secondary"}
+                        >
+                          {user.role}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={user.isActive ? "default" : "destructive"}
+                        >
+                          {user.isActive ? "Active" : "Inactive"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "—"}
+                      </TableCell>
+                      <TableCell className="text-right space-x-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openEditDialog(user)}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant={user.isActive ? "destructive" : "outline"}
+                          size="sm"
+                          disabled={
+                            toggleStatusMutation.isPending &&
+                            toggleStatusMutation.variables?.id === user.id
+                          }
+                          onClick={() =>
+                            toggleStatusMutation.mutate({
+                              id: user.id,
+                              isActive: !user.isActive,
+                            })
+                          }
+                        >
+                          {toggleStatusMutation.isPending &&
                           toggleStatusMutation.variables?.id === user.id
-                        }
-                        onClick={() =>
-                          toggleStatusMutation.mutate({
-                            id: user.id,
-                            isActive: !user.isActive,
-                          })
-                        }
-                      >
-                        {toggleStatusMutation.isPending &&
-                        toggleStatusMutation.variables?.id === user.id
-                          ? "Saving..."
-                          : user.isActive
-                          ? "Deactivate"
-                          : "Activate"}
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
+                            ? "Saving..."
+                            : user.isActive
+                            ? "Deactivate"
+                            : "Activate"}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  )
+                )
               )}
             </TableBody>
           </Table>
+          </div>
         </div>
 
         <Dialog
@@ -341,7 +363,7 @@ function Users() {
             if (!open) setDialogError("");
           }}
         >
-          <DialogContent>
+          <DialogContent className="max-w-[95vw] sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>
                 {editingUser ? "Edit User" : "Add New User"}

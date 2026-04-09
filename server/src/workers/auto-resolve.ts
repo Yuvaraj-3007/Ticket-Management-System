@@ -34,19 +34,19 @@ async function processJob(job: Job<AutoResolveJobData>): Promise<void> {
   const { ticketDbId, ticketId, subject, body, adminId, customerName } = job.data;
 
   if (!process.env.MOONSHOT_API_KEY) {
-    await prisma.ticket.update({ where: { id: ticketDbId }, data: { status: STATUS.OPEN, assignedToId: null } });
+    await prisma.ticket.update({ where: { id: ticketDbId }, data: { status: STATUS.OPEN_NOT_STARTED, assignedToId: null } });
     return;
   }
 
   const kb = readKnowledgeBase();
   if (!kb) {
-    // No KB — move ticket to OPEN so agents see it
-    await prisma.ticket.update({ where: { id: ticketDbId }, data: { status: STATUS.OPEN, assignedToId: null } });
+    // No KB — move ticket to OPEN_NOT_STARTED so agents see it
+    await prisma.ticket.update({ where: { id: ticketDbId }, data: { status: STATUS.OPEN_NOT_STARTED, assignedToId: null } });
     return;
   }
 
-  // Mark as PROCESSING so it stays hidden while AI works
-  await prisma.ticket.update({ where: { id: ticketDbId }, data: { status: STATUS.PROCESSING } });
+  // Mark as OPEN_QA while AI analyses (keeps it visible but clearly flagged)
+  await prisma.ticket.update({ where: { id: ticketDbId }, data: { status: STATUS.OPEN_QA } });
 
   const kimi = createOpenAICompatible({
     name:    "moonshot",
@@ -86,13 +86,13 @@ Rules:
   try {
     parsed = JSON.parse(text);
   } catch {
-    // Parse failed — move to OPEN for agents, unassign AI agent
-    await prisma.ticket.update({ where: { id: ticketDbId }, data: { status: STATUS.OPEN, assignedToId: null } });
+    // Parse failed — move to OPEN_NOT_STARTED for agents, unassign AI agent
+    await prisma.ticket.update({ where: { id: ticketDbId }, data: { status: STATUS.OPEN_NOT_STARTED, assignedToId: null } });
     return;
   }
 
   if (parsed.resolved && parsed.answer?.trim()) {
-    // KB match — post reply and resolve (keep AI agent as assignee)
+    // KB match — post reply and mark as done (keep AI agent as assignee)
     await prisma.$transaction([
       prisma.comment.create({
         data: {
@@ -105,14 +105,14 @@ Rules:
       }),
       prisma.ticket.update({
         where: { id: ticketDbId },
-        data:  { status: STATUS.RESOLVED },
+        data:  { status: STATUS.OPEN_DONE },
       }),
     ]);
     console.log(`[auto-resolve] ${ticketId} resolved from knowledge base`);
   } else {
     // No KB match — hand off to agents, unassign AI agent
-    await prisma.ticket.update({ where: { id: ticketDbId }, data: { status: STATUS.OPEN, assignedToId: null } });
-    console.log(`[auto-resolve] ${ticketId} no KB match — moved to OPEN`);
+    await prisma.ticket.update({ where: { id: ticketDbId }, data: { status: STATUS.OPEN_NOT_STARTED, assignedToId: null } });
+    console.log(`[auto-resolve] ${ticketId} no KB match — moved to OPEN_NOT_STARTED`);
   }
 }
 

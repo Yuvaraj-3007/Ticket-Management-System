@@ -9,6 +9,13 @@ export const apiCommentSchema = z.object({
   senderType: z.enum(COMMENT_SENDER_TYPES),
   author:     z.object({ id: z.string(), name: z.string() }),
   createdAt:  z.string(),
+  attachments: z.array(z.object({
+    id:        z.string(),
+    filename:  z.string(),
+    mimetype:  z.string(),
+    size:      z.number(),
+    url:       z.string(),
+  })).optional().default([]),
 });
 export const apiCommentsSchema = z.array(apiCommentSchema);
 export type ApiComment = z.infer<typeof apiCommentSchema>;

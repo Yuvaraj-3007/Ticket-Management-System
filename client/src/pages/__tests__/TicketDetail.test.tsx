@@ -53,12 +53,13 @@ const BASE_TICKET: ApiTicket = {
   description: "Users on floor 3 cannot reach the internal wiki.",
   type:        TICKET_TYPE.SUPPORT,
   priority:    PRIORITY.HIGH,
-  status:      STATUS.OPEN,
+  status:      STATUS.OPEN_NOT_STARTED,
   project:     "Email Intake",
   assignedTo:  null,
   createdBy:   { id: "admin-id", name: "Admin" },
   createdAt:   "2026-04-01T10:00:00.000Z",
   updatedAt:   "2026-04-01T10:00:00.000Z",
+  attachments: [],
 };
 
 const ASSIGNED_TICKET: ApiTicket = {
@@ -245,8 +246,8 @@ describe("TicketDetail — ticket data rendering", () => {
   it("shows the status badge", async () => {
     renderDetail();
     await screen.findByText("TKT-0001");
-    // "Open" appears in both the header badge and the status trigger — use getAllByText
-    expect(screen.getAllByText("Open").length).toBeGreaterThanOrEqual(1);
+    // "Not Started" appears in both the header badge and the status trigger — use getAllByText
+    expect(screen.getAllByText("Not Started").length).toBeGreaterThanOrEqual(1);
   });
 
   it("shows the project metadata label and value", async () => {
@@ -488,29 +489,29 @@ describe("updateTypeSchema", () => {
 describe("TicketDetail — status dropdown", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    setupGetSuccess(BASE_TICKET); // STATUS.OPEN
+    setupGetSuccess(BASE_TICKET); // STATUS.OPEN_NOT_STARTED
   });
 
   it("Status trigger shows the current status label", async () => {
     renderDetail();
     await screen.findByText("TKT-0001");
-    // "Open" appears in the status trigger (BASE_TICKET is STATUS.OPEN)
+    // "Not Started" appears in the status trigger (BASE_TICKET is STATUS.OPEN_NOT_STARTED)
     const statusRow = screen.getByText("Status").closest("div")!;
-    expect(statusRow).toHaveTextContent("Open");
+    expect(statusRow).toHaveTextContent("Not Started");
   });
 
   it("calls PATCH /status with new value when selection changes", async () => {
     mockedAxios.patch = vi.fn().mockResolvedValue({
-      data: { ...BASE_TICKET, status: "IN_PROGRESS" },
+      data: { ...BASE_TICKET, status: "OPEN_IN_PROGRESS" },
     });
 
     renderDetail();
     await screen.findByText("TKT-0001");
 
-    // Open the Status dropdown — it's the second trigger (assignee is last)
+    // Open the Status dropdown
     const triggers = document.querySelectorAll('[data-slot="select-trigger"]');
-    // Status trigger is the one containing "Open"
-    const statusTrigger = Array.from(triggers).find((t) => t.textContent?.includes("Open")) as HTMLElement;
+    // Status trigger is the one containing "Not Started"
+    const statusTrigger = Array.from(triggers).find((t) => t.textContent?.includes("Not Started")) as HTMLElement;
     await userEvent.click(statusTrigger);
 
     const items = document.querySelectorAll('[data-slot="select-item"]');
@@ -520,7 +521,7 @@ describe("TicketDetail — status dropdown", () => {
     await waitFor(() => {
       expect(mockedAxios.patch).toHaveBeenCalledWith(
         expect.stringContaining("/api/tickets/TKT-0001/status"),
-        { status: "IN_PROGRESS" },
+        { status: "OPEN_IN_PROGRESS" },
         expect.any(Object)
       );
     });
@@ -533,12 +534,12 @@ describe("TicketDetail — status dropdown", () => {
     await screen.findByText("TKT-0001");
 
     const triggers = document.querySelectorAll('[data-slot="select-trigger"]');
-    const statusTrigger = Array.from(triggers).find((t) => t.textContent?.includes("Open")) as HTMLElement;
+    const statusTrigger = Array.from(triggers).find((t) => t.textContent?.includes("Not Started")) as HTMLElement;
     await userEvent.click(statusTrigger);
 
     const items = document.querySelectorAll('[data-slot="select-item"]');
-    const resolvedItem = Array.from(items).find((i) => i.textContent?.includes("Resolved")) as HTMLElement;
-    await userEvent.click(resolvedItem);
+    const doneItem = Array.from(items).find((i) => i.textContent?.includes("Done")) as HTMLElement;
+    await userEvent.click(doneItem);
 
     await waitFor(() => {
       expect(screen.getByText(/failed to update status/i)).toBeInTheDocument();

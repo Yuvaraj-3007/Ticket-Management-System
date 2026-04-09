@@ -2,10 +2,10 @@ import { useNavigate } from "react-router-dom";
 import { Link } from "react-router-dom";
 import { useSession, signOut } from "@/lib/auth-client";
 import { ROLES, type UserRole } from "@tms/core";
-import { LogOut, Sun, Moon, UserRound } from "lucide-react";
+import { LogOut, Sun, Moon, UserRound, Menu } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 
-function Navbar() {
+function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const navigate = useNavigate();
   const { data: session } = useSession();
   const { theme, toggleTheme } = useTheme();
@@ -29,7 +29,17 @@ function Navbar() {
         flexShrink:   0,
       }}
     >
-      <div className="flex items-center px-6" style={{ height: "56px" }}>
+      <div className="flex items-center px-4" style={{ height: "56px" }}>
+
+        {/* Hamburger — mobile only */}
+        <button
+          className="flex md:hidden items-center justify-center w-8 h-8 rounded-lg mr-1 flex-shrink-0"
+          onClick={onMenuClick}
+          aria-label="Toggle menu"
+          style={{ background: "rgba(0,0,0,0.12)", border: "1px solid rgba(255,255,255,0.2)", color: "#ffffff" }}
+        >
+          <Menu className="h-4 w-4" />
+        </button>
 
         {/* Logo — flex-1 pushes right side to far edge */}
         <Link

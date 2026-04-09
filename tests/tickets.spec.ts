@@ -1,5 +1,5 @@
 import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
-import { type StatusValue, type TicketTypeValue } from "@tms/core";
+import { type StatusValue, type TicketTypeValue, STATUSES } from "@tms/core";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -291,5 +291,117 @@ test.describe("GET /api/tickets — pagination", () => {
     const res  = await request.get(`${BASE}/api/tickets?pageSize=3`);
     const body = await res.json();
     expect(body.totalPages).toBe(Math.ceil(body.total / 3));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite 5 — GET /api/tickets new filters: assignedToId, from, to
+// ---------------------------------------------------------------------------
+
+test.describe("GET /api/tickets — assignee and date filters", () => {
+  let seedTicketId: string;
+
+  test.beforeAll(async ({ request }) => {
+    await apiSignIn(request);
+    // Seed a ticket for filter tests
+    const res = await request.post(`${BASE}/api/webhooks/email`, {
+      data: {
+        from:    "filter-test@example.com",
+        subject: "Filter test ticket",
+        body:    "Used to test assignee and date filters.",
+      },
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status()).toBe(201);
+    seedTicketId = (await res.json()).ticketId;
+  });
+
+  test("assignedToId=unassigned returns only tickets with no assignee", async ({ request }) => {
+    await apiSignIn(request);
+    const res  = await request.get(`${BASE}/api/tickets?assignedToId=unassigned`);
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    // Every returned ticket must have assignedTo === null
+    for (const t of body.data as Array<{ assignedTo: unknown }>) {
+      expect(t.assignedTo).toBeNull();
+    }
+    // The seeded ticket (unassigned) must appear
+    const found = (body.data as Array<{ ticketId: string }>).find((t) => t.ticketId === seedTicketId);
+    expect(found).toBeDefined();
+  });
+
+  test("assignedToId=unassigned returns 200 with valid envelope", async ({ request }) => {
+    await apiSignIn(request);
+    const res  = await request.get(`${BASE}/api/tickets?assignedToId=unassigned`);
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body).toHaveProperty("data");
+    expect(body).toHaveProperty("total");
+    expect(Array.isArray(body.data)).toBe(true);
+  });
+
+  test("from filter restricts tickets to those created on or after the given date", async ({ request }) => {
+    await apiSignIn(request);
+    const fromDate = new Date();
+    fromDate.setFullYear(fromDate.getFullYear() - 1); // one year ago
+    const from = fromDate.toISOString().slice(0, 10);
+
+    const res  = await request.get(`${BASE}/api/tickets?from=${from}`);
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    // All returned tickets must have createdAt >= from
+    for (const t of body.data as Array<{ createdAt: string }>) {
+      expect(new Date(t.createdAt).getTime()).toBeGreaterThanOrEqual(fromDate.getTime());
+    }
+  });
+
+  test("to filter restricts tickets to those created on or before the given date", async ({ request }) => {
+    await apiSignIn(request);
+    const toDate = new Date();
+    toDate.setFullYear(toDate.getFullYear() + 1); // one year from now (includes everything)
+    const to = toDate.toISOString().slice(0, 10);
+
+    const res  = await request.get(`${BASE}/api/tickets?to=${to}`);
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body.data)).toBe(true);
+    // All tickets should be included since to is far in the future
+    const totalRes = await request.get(`${BASE}/api/tickets`);
+    const totalBody = await totalRes.json();
+    expect(body.total).toBe(totalBody.total);
+  });
+
+  test("from=future date returns empty data", async ({ request }) => {
+    await apiSignIn(request);
+    const futureDate = "2099-01-01";
+    const res  = await request.get(`${BASE}/api/tickets?from=${futureDate}`);
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.data).toHaveLength(0);
+    expect(body.total).toBe(0);
+  });
+
+  test("to=past date returns empty data", async ({ request }) => {
+    await apiSignIn(request);
+    const pastDate = "2000-01-01";
+    const res  = await request.get(`${BASE}/api/tickets?to=${pastDate}`);
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.data).toHaveLength(0);
+    expect(body.total).toBe(0);
+  });
+
+  test("from and to can be combined with other filters", async ({ request }) => {
+    await apiSignIn(request);
+    const from = "2020-01-01";
+    const to   = "2099-12-31";
+    const res  = await request.get(`${BASE}/api/tickets?assignedToId=unassigned&from=${from}&to=${to}`);
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body.data)).toBe(true);
+    // All returned tickets must be unassigned
+    for (const t of body.data as Array<{ assignedTo: unknown }>) {
+      expect(t.assignedTo).toBeNull();
+    }
   });
 });

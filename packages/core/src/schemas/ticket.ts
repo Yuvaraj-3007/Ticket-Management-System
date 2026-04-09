@@ -6,7 +6,7 @@ import { z } from "zod";
 
 export const TICKET_TYPES = ["BUG", "REQUIREMENT", "TASK", "SUPPORT"] as const;
 export const PRIORITIES   = ["LOW", "MEDIUM", "HIGH", "CRITICAL"] as const;
-export const STATUSES     = ["NEW", "OPEN", "IN_PROGRESS", "PROCESSING", "RESOLVED", "CLOSED"] as const;
+export const STATUSES     = ["UN_ASSIGNED", "OPEN_NOT_STARTED", "OPEN_IN_PROGRESS", "OPEN_QA", "OPEN_DONE", "CLOSED"] as const;
 
 export type TicketTypeValue = (typeof TICKET_TYPES)[number];
 export type PriorityValue   = (typeof PRIORITIES)[number];
@@ -28,12 +28,12 @@ export const PRIORITY = {
 } as const satisfies Record<string, PriorityValue>;
 
 export const STATUS = {
-  NEW:         "NEW",
-  OPEN:        "OPEN",
-  IN_PROGRESS: "IN_PROGRESS",
-  PROCESSING:  "PROCESSING",
-  RESOLVED:    "RESOLVED",
-  CLOSED:      "CLOSED",
+  UN_ASSIGNED:      "UN_ASSIGNED",
+  OPEN_NOT_STARTED: "OPEN_NOT_STARTED",
+  OPEN_IN_PROGRESS: "OPEN_IN_PROGRESS",
+  OPEN_QA:          "OPEN_QA",
+  OPEN_DONE:        "OPEN_DONE",
+  CLOSED:           "CLOSED",
 } as const satisfies Record<string, StatusValue>;
 
 // ──────────────────────────────────────
@@ -57,6 +57,20 @@ export const apiTicketSchema = z.object({
   createdAt:            z.string(),
   updatedAt:            z.string(),
   lastCustomerReplyAt:  z.string().nullable().optional(),
+  hrmsClientId:         z.string().nullable().optional(),
+  hrmsClientName:       z.string().nullable().optional(),
+  hrmsProjectId:        z.string().nullable().optional(),
+  hrmsProjectName:      z.string().nullable().optional(),
+  rating:               z.number().int().min(1).max(5).nullable().optional(),
+  ratingText:           z.string().nullable().optional(),
+  attachments:          z.array(z.object({
+    id:        z.string(),
+    filename:  z.string(),
+    mimetype:  z.string(),
+    size:      z.number(),
+    url:       z.string(),
+    createdAt: z.string(),
+  })).optional().default([]),
 });
 
 export const apiTicketsSchema = z.array(apiTicketSchema);
@@ -80,10 +94,14 @@ export type TicketSort = z.infer<typeof ticketSortSchema>;
 // ──────────────────────────────────────
 
 export const ticketFilterSchema = z.object({
-  search:   z.string().max(200, "Search term must be 200 characters or fewer").optional(),
-  status:   z.enum(STATUSES).optional(),
-  priority: z.enum(PRIORITIES).optional(),
-  type:     z.enum(TICKET_TYPES).optional(),
+  search:       z.string().max(200, "Search term must be 200 characters or fewer").optional(),
+  status:       z.enum(STATUSES).optional(),
+  priority:     z.enum(PRIORITIES).optional(),
+  type:         z.enum(TICKET_TYPES).optional(),
+  assignedToId: z.string().optional(),   // user UUID or "unassigned"
+  clientId:     z.string().optional(),   // hrmsClientId value
+  from:         z.string().optional(),   // ISO date string
+  to:           z.string().optional(),   // ISO date string
 });
 export type TicketFilter = z.infer<typeof ticketFilterSchema>;
 
@@ -119,11 +137,12 @@ export type PaginatedTickets = z.infer<typeof paginatedTicketsSchema>;
 // ──────────────────────────────────────
 
 export const inboundEmailSchema = z.object({
-  from:    z.string().email("Must be a valid email address"),
-  name:    z.string().max(255).optional(),
-  subject: z.string().min(1, "Subject is required").max(255, "Subject must be 255 characters or fewer"),
-  body:    z.string().min(1, "Body is required").max(10000, "Body must be 10000 characters or fewer"),
-  project: z.string().min(1).max(100).optional(),
+  from:         z.string().email("Must be a valid email address"),
+  name:         z.string().max(255).optional(),
+  subject:      z.string().min(1, "Subject is required").max(255, "Subject must be 255 characters or fewer"),
+  body:         z.string().min(1, "Body is required").max(10000, "Body must be 10000 characters or fewer"),
+  project:      z.string().min(1).max(100).optional(),
+  hrmsClientId: z.string().optional(), // Used internally for test ticket setup
 });
 
 export type InboundEmail = z.infer<typeof inboundEmailSchema>;
@@ -165,3 +184,34 @@ export const updateTypeSchema = z.object({
   type: z.enum(TICKET_TYPES),
 });
 export type UpdateTypeInput = z.infer<typeof updateTypeSchema>;
+
+// ──────────────────────────────────────
+// Portal schemas
+// Used by the customer self-service portal routes (/api/portal/*)
+// ──────────────────────────────────────
+
+export const portalSubmitSchema = z.object({
+  name:          z.string().min(1, "Name is required").max(255),
+  email:         z.string().email("Valid email required"),
+  subject:       z.string().min(1, "Subject is required").max(255),
+  body:          z.string().min(1, "Description is required").max(10000),
+  projectId:     z.string().optional(),
+  projectName:   z.string().max(255).optional(),
+  captchaToken:  z.string().max(512).optional(),   // M-6 — length-bound to prevent DoS via oversized token
+  captchaAnswer: z.string().max(20).optional(),    // M-6 — length-bound captcha answer
+});
+export type PortalSubmitInput = z.infer<typeof portalSubmitSchema>;
+
+export const portalSignupSchema = z.object({
+  name:     z.string().min(1, "Name is required").max(128),
+  email:    z.string().email("Valid email required"),
+  password: z.string().min(8, "Password must be at least 8 characters").max(128),
+  clientId: z.string().optional(), // HRMS client ID — binds customer to their portal
+});
+export type PortalSignupInput = z.infer<typeof portalSignupSchema>;
+
+export const portalRatingSchema = z.object({
+  rating:     z.number().int().min(1).max(5),
+  ratingText: z.string().max(1000).optional(),
+});
+export type PortalRatingInput = z.infer<typeof portalRatingSchema>;
