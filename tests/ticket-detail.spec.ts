@@ -398,7 +398,7 @@ test.describe("PATCH /api/tickets/:id/status — API", () => {
   test("returns 404 for a non-existent ticketId", async ({ request }) => {
     await apiSignIn(request);
     const res = await request.patch(`${BASE}/api/tickets/TKT-9999/status`, {
-      data:    { status: "RESOLVED" },
+      data:    { status: "OPEN_IN_PROGRESS" },
       headers: { "Content-Type": "application/json" },
     });
     expect(res.status()).toBe(404);

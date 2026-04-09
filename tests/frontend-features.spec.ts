@@ -57,10 +57,12 @@ test.describe("Custom CAPTCHA on portal submit forms", () => {
 
     await page.goto("/portal/test-slug");
 
-    // The custom CAPTCHA canvas should be present
-    await expect(page.locator("canvas")).toBeAttached({ timeout: 10_000 });
-    // The instruction text should be visible
-    await expect(page.getByText("Type the characters shown below")).toBeVisible();
+    // Wait for the form to load (past the "Loading portal..." state)
+    await page.waitForSelector("form", { timeout: 10_000 });
+    // The custom CAPTCHA canvas should be visible
+    await expect(page.locator("canvas").first()).toBeVisible({ timeout: 10_000 });
+    // The CAPTCHA input field should be present
+    await expect(page.locator('input[placeholder="Enter code"]')).toBeVisible();
   });
 
   test("SubmitTicketModal renders custom CAPTCHA and submit is disabled without it", async ({ page }) => {
@@ -371,7 +373,7 @@ test.describe("Analytics page", () => {
     // Summary cards
     await expect(page.getByText("Total Tickets")).toBeVisible();
     await expect(page.getByText("42")).toBeVisible();
-    await expect(page.getByText("Avg Resolution")).toBeVisible();
+    await expect(page.getByText("Avg Resolution", { exact: true })).toBeVisible();
     await expect(page.getByText("24.5h")).toBeVisible();
   });
 

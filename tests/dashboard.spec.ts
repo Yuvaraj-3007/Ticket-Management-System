@@ -170,7 +170,7 @@ test.describe("Dashboard — UI", () => {
 
   test("shows all 5 stat card labels", async ({ page }) => {
     await expect(page.getByText("Total Tickets")).toBeVisible();
-    await expect(page.getByText("Open")).toBeVisible();
+    await expect(page.getByText("Open", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Un-Assigned")).toBeVisible();
     await expect(page.getByText("AI Resolution Rate")).toBeVisible();
     await expect(page.getByText("Avg Resolution Time")).toBeVisible();

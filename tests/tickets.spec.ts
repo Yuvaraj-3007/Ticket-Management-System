@@ -318,7 +318,8 @@ test.describe("GET /api/tickets — assignee and date filters", () => {
 
   test("assignedToId=unassigned returns only tickets with no assignee", async ({ request }) => {
     await apiSignIn(request);
-    const res  = await request.get(`${BASE}/api/tickets?assignedToId=unassigned`);
+    // Use a large pageSize to avoid pagination hiding the newly seeded ticket
+    const res  = await request.get(`${BASE}/api/tickets?assignedToId=unassigned&pageSize=100`);
     expect(res.status()).toBe(200);
     const body = await res.json();
     // Every returned ticket must have assignedTo === null
