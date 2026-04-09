@@ -32,7 +32,10 @@ async function loginAsAdmin(page: Page) {
 
 test.describe("Custom CAPTCHA on portal submit forms", () => {
   test("PortalSubmit page renders custom CAPTCHA widget", async ({ page }) => {
-    // Mock the portal info endpoint so the page loads without a real backend slug
+    // Mock session as unauthenticated to prevent redirect away from submit form
+    await page.route(/\/api\/auth\/get-session/, (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(null) })
+    );
     await page.route(/\/api\/portal\/test-slug$/, (route) =>
       route.fulfill({
         status:      200,
@@ -57,8 +60,7 @@ test.describe("Custom CAPTCHA on portal submit forms", () => {
 
     await page.goto("/portal/test-slug");
 
-    // Wait for the form to load and the CAPTCHA widget to be rendered
-    // SimpleCaptcha renders a canvas and an input for the code
+    // Wait for the CAPTCHA widget — SimpleCaptcha renders an input for the code
     await expect(page.locator('input[placeholder="Enter code"]')).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("canvas").first()).toBeAttached();
   });
