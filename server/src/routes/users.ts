@@ -5,6 +5,7 @@ import { Prisma } from "../generated/prisma/client.js";
 import prisma from "../lib/prisma.js";
 import { requireAdmin } from "../middleware/auth.js";
 import { ROLES, STATUS, createUserSchema, editUserSchema } from "@tms/core";
+import { runHrmsSync } from "../workers/sync-hrms.js";
 
 const router = Router();
 
@@ -250,6 +251,16 @@ router.delete("/:id", async (req: Request<{ id: string }>, res: Response) => {
     res.status(204).send();
   } catch {
     res.status(500).json({ error: "Failed to delete user" });
+  }
+});
+
+// POST /api/users/sync-hrms — manually trigger HRMS employee sync
+router.post("/sync-hrms", async (_req: Request, res: Response) => {
+  try {
+    const result = await runHrmsSync();
+    res.json(result);
+  } catch {
+    res.status(500).json({ error: "HRMS sync failed" });
   }
 });
 

@@ -18,6 +18,7 @@ import { requireWebhookSecret } from "./middleware/webhook.js";
 import boss from "./lib/boss.js";
 import { registerClassifyWorker } from "./workers/classify.js";
 import { registerAutoResolveWorker } from "./workers/auto-resolve.js";
+import { registerSyncHrmsWorker, SYNC_HRMS_QUEUE } from "./workers/sync-hrms.js";
 import { watchInbox, isGmailApiConfigured } from "./lib/gmail.js";
 /* === IMAP (commented out — re-enable when IMAP Basic Auth is allowed in M365) ===
 import { watchImapInbox, isImapConfigured, resetImapClient } from "./lib/imap.js";
@@ -180,7 +181,8 @@ if (process.env.NODE_ENV !== "test") {
     Sentry.captureException(err, { tags: { source: "pg-boss" } });
   });
   boss.start()
-    .then(() => Promise.all([registerClassifyWorker(), registerAutoResolveWorker()]))
+    .then(() => Promise.all([registerClassifyWorker(), registerAutoResolveWorker(), registerSyncHrmsWorker()]))
+    .then(() => boss.schedule(SYNC_HRMS_QUEUE, "0 2 * * *", {}))
     .then(() => watchInbox())
     .then(() => console.log("[boss] Workers registered"))
     .catch((err) => console.error("[boss] Failed to start:", err));

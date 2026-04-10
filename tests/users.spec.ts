@@ -218,3 +218,29 @@ test.describe("Agent performance detail page (/users/:id)", () => {
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   });
 });
+
+// ---------------------------------------------------------------------------
+// HRMS sync endpoint tests
+// ---------------------------------------------------------------------------
+
+test.describe("HRMS sync — POST /api/users/sync-hrms", () => {
+  test("returns 401 when unauthenticated", async ({ request }) => {
+    const res = await request.post("http://localhost:5001/api/users/sync-hrms");
+    expect(res.status()).toBe(401);
+  });
+
+  test("returns a valid SyncResult shape when authenticated as admin", async ({ request }) => {
+    // Authenticate as admin first
+    await request.post("http://localhost:5001/api/auth/sign-in/email", {
+      data: { email: "admin@wisright.com", password: "Test@123" },
+    });
+
+    const res = await request.post("http://localhost:5001/api/users/sync-hrms");
+    expect(res.status()).toBe(200);
+
+    const body = await res.json();
+    expect(typeof body.skipped).toBe("boolean");
+    expect(Array.isArray(body.deactivated)).toBe(true);
+    expect(Array.isArray(body.reactivated)).toBe(true);
+  });
+});
