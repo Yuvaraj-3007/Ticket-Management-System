@@ -1,0 +1,89 @@
+services:
+
+  # ── PostgreSQL Database ────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: tms-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ticket_management
+      POSTGRES_USER:     tms_user
+      POSTGRES_PASSWORD: tms_password
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - tms-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tms_user -d ticket_management"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Backend ───────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    container_name: tms-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV:           production
+      PORT:               4000
+      DATABASE_URL:       postgresql://tms_user:tms_password@db:5432/ticket_management
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL:    ${BETTER_AUTH_URL}
+      CLIENT_URL:         ${CLIENT_URL}
+      CAPTCHA_SECRET:     ${CAPTCHA_SECRET}
+      WEBHOOK_SECRET:     ${WEBHOOK_SECRET}
+      # Optional — leave blank to disable
+      MOONSHOT_API_KEY:       ${MOONSHOT_API_KEY:-}
+      SENTRY_DSN:             ${SENTRY_DSN:-}
+      GMAIL_USER:             ${GMAIL_USER:-}
+      GMAIL_APP_PASSWORD:     ${GMAIL_APP_PASSWORD:-}
+      GOOGLE_CLIENT_ID:       ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET:   ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REFRESH_TOKEN:   ${GOOGLE_REFRESH_TOKEN:-}
+      GMAIL_PUBSUB_TOPIC:     ${GMAIL_PUBSUB_TOPIC:-}
+      GMAIL_PUBSUB_SECRET:    ${GMAIL_PUBSUB_SECRET:-}
+    volumes:
+      - uploads:/app/server/uploads
+    ports:
+      - "4000:4000"
+    networks:
+      - tms-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:4000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Frontend ──────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+    container_name: tms-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      # Nginx proxies /api/* and /uploads/* to the backend container
+      BACKEND_URL: http://backend:4000
+    ports:
+      - "80:80"
+    networks:
+      - tms-net
+
+# ── Volumes ────────────────────────────────────────────────────────────────
+volumes:
+  db_data:
+  uploads:
+
+# ── Network ────────────────────────────────────────────────────────────────
+networks:
+  tms-net:
+    driver: bridge
