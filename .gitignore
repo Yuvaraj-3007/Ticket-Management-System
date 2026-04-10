@@ -55,6 +55,8 @@ server/bun
 server/server_out.txt
 server/diag_tmp.ts
 server/*.log
+server_out.txt
+client/client_out.txt
 
 # Uploaded files (local disk storage)
 uploads/
