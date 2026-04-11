@@ -12,8 +12,10 @@ FROM base AS deps
 COPY package.json bun.lock ./
 
 # Copy workspace members needed by the server
+# client/package.json must be present so Bun can resolve all workspaces in package.json
 COPY packages/core/package.json ./packages/core/package.json
 COPY server/package.json         ./server/package.json
+COPY client/package.json         ./client/package.json
 
 # Install all workspace deps (hoisted into root node_modules)
 RUN bun install --frozen-lockfile
