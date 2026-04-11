@@ -11,7 +11,9 @@ WORKDIR /app
 COPY package.json bun.lock ./
 
 # Copy workspace members needed by the client
+# server/package.json must be present so Bun can resolve all workspaces in package.json
 COPY packages/core/package.json ./packages/core/package.json
+COPY server/package.json         ./server/package.json
 COPY client/package.json         ./client/package.json
 
 # Install deps
