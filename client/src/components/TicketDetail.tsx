@@ -276,7 +276,7 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
               {Array.from({ length: 5 }).map((_, i) => (
                 <svg
                   key={i}
-                  className={`w-5 h-5 ${i < ticket.rating! ? "text-amber-400" : "text-gray-200"}`}
+                  className={`w-5 h-5 ${i < ticket.rating! ? "text-amber-400" : "text-muted-foreground/30"}`}
                   fill="currentColor"
                   viewBox="0 0 20 20"
                 >
@@ -284,7 +284,7 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
                 </svg>
               ))}
             </div>
-            <span className="text-sm font-semibold text-gray-700">{ticket.rating} / 5</span>
+            <span className="text-sm font-semibold text-foreground">{ticket.rating} / 5</span>
           </div>
           {ticket.ratingText && (
             <p className="mt-2 text-sm text-muted-foreground italic border-l-2 border-amber-300 pl-3">

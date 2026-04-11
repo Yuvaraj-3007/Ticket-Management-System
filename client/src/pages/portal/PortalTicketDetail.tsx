@@ -211,7 +211,7 @@ function CommentThread({ comments, sortAsc }: { comments: PortalComment[]; sortA
             key={comment.id}
             className={`border rounded-lg p-4 ${
               isCustomer
-                ? "bg-blue-50/50 dark:bg-blue-950/20"
+                ? "bg-blue-50/50"
                 : "bg-muted/10"
             }`}
           >
@@ -414,7 +414,7 @@ export default function PortalTicketDetail() {
 
           <div className="space-y-3 mb-6">
             {/* Original message — always shown as first reply card */}
-            <div className="border rounded-lg p-4 bg-blue-50/50 dark:bg-blue-950/20">
+            <div className="border rounded-lg p-4 bg-blue-50/50">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-sm font-semibold">
                   {ticket.senderName ?? ticket.senderEmail}

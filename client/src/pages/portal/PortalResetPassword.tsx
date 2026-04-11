@@ -1,12 +1,8 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { resetPassword } from "@/lib/auth-client";
-import { Eye, EyeOff, Sun, Moon } from "lucide-react";
-import { useTheme } from "@/contexts/ThemeContext";
-import { Button } from "@/components/ui/button";
+import { Eye, EyeOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
 export default function PortalResetPassword() {
   const [searchParams] = useSearchParams();
@@ -18,8 +14,6 @@ export default function PortalResetPassword() {
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const { theme, toggleTheme } = useTheme();
-  const isDark = theme === "dark";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,10 +48,10 @@ export default function PortalResetPassword() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: "var(--rt-bg)" }}>
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: "#fff9f9" }}>
       {/* Header */}
-      <header style={{ background: "var(--rt-accent)", flexShrink: 0 }}>
-        <div className="flex items-center justify-between px-4 sm:px-6" style={{ height: "56px" }}>
+      <header style={{ background: "linear-gradient(135deg, #0a0000 0%, #660000 35%, #990000 70%, #cc0000 100%)", flexShrink: 0 }}>
+        <div className="flex items-center px-4 sm:px-6" style={{ height: "64px" }}>
           <div className="flex items-center gap-2.5">
             <div className="flex items-center justify-center rounded-lg px-5 py-1.5" style={{ background: "#ffffff" }}>
               <img src="/wisright-logo.png" alt="Right Tracker" style={{ height: "38px", width: "auto", objectFit: "contain" }} />
@@ -65,94 +59,106 @@ export default function PortalResetPassword() {
             <div style={{ width: "1px", height: "20px", background: "rgba(255,255,255,0.3)" }} />
             <span className="text-sm font-bold" style={{ color: "#ffffff", whiteSpace: "nowrap" }}>
               Right Tracker
-              <span className="hidden sm:inline font-normal text-xs ml-1.5" style={{ color: "rgba(255,255,255,0.7)" }}>— WisRight's Support Tool</span>
+              <span className="hidden sm:inline font-normal text-xs ml-1.5" style={{ color: "rgba(255,255,255,0.7)" }}>— WisRight Support Tool</span>
             </span>
           </div>
-          <button
-            onClick={toggleTheme}
-            className="flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200"
-            title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-            style={{ background: "rgba(0,0,0,0.12)", border: "1px solid rgba(255,255,255,0.2)", color: "#ffffff" }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(0,0,0,0.22)"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(0,0,0,0.12)"; }}
-          >
-            {isDark ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
-          </button>
         </div>
       </header>
 
       <main className="flex-1 flex flex-col items-center justify-center px-4 py-8">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle className="text-center text-lg">Set New Password</CardTitle>
-            <CardDescription className="text-center">
-              Choose a strong password for your account.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+        <div style={{ width: "100%", maxWidth: "420px" }}>
+          <div style={{ background: "#ffffff", borderRadius: "20px", padding: "40px", boxShadow: "0 4px 24px rgba(204,0,0,0.10), 0 1px 3px rgba(0,0,0,0.05)" }}>
+            {/* Gold top bar */}
+            <div style={{ height: "4px", background: "linear-gradient(90deg, #0a0000, #ca8a04, #fbbf24)", borderRadius: "4px 4px 0 0", margin: "-40px -40px 32px", borderTopLeftRadius: "20px", borderTopRightRadius: "20px" }} />
+
             {!token ? (
-              <div className="text-center py-4 space-y-3">
-                <p className="text-red-600 text-sm">Invalid or missing reset token.</p>
-                <Link to="/portal/forgot-password" className="text-blue-600 hover:underline text-sm">
+              <div style={{ textAlign: "center", padding: "16px 0" }} className="space-y-3">
+                <p style={{ color: "#be123c", fontSize: "14px" }}>Invalid or missing reset token.</p>
+                <Link
+                  to="/portal/forgot-password"
+                  style={{ color: "#ca8a04", fontSize: "13px", fontWeight: 600, textDecoration: "none" }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "#990000"; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "#ca8a04"; }}
+                >
                   Request a new link
                 </Link>
               </div>
             ) : (
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <>
+                <div style={{ marginBottom: "24px" }}>
+                  <h2 style={{ fontSize: "22px", fontWeight: 800, color: "#1a0000", margin: "0 0 6px", letterSpacing: "-0.3px" }}>Set New Password</h2>
+                  <p style={{ color: "#6b7280", fontSize: "13px", margin: 0 }}>Choose a strong password for your account.</p>
+                </div>
+
                 {error && (
-                  <div className="bg-red-50 border border-red-200 text-red-700 text-sm p-3 rounded-md">
-                    {error}
+                  <div style={{ background: "#fff1f2", border: "1px solid #fecdd3", color: "#be123c", borderRadius: "10px", padding: "10px 14px", fontSize: "13px", marginBottom: "20px" }}>
+                    ⚠ {error}
                   </div>
                 )}
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="new-password">New Password</Label>
-                  <div className="relative">
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div>
+                    <label htmlFor="new-password" style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "6px" }}>New Password</label>
+                    <div style={{ position: "relative" }}>
+                      <Input
+                        id="new-password"
+                        type={showPw ? "text" : "password"}
+                        placeholder="At least 8 characters"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        style={{ height: "44px", fontSize: "14px", paddingRight: "44px", borderRadius: "10px" }}
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPw((v) => !v)}
+                        style={{ position: "absolute", right: 0, top: 0, bottom: 0, padding: "0 14px", background: "none", border: "none", cursor: "pointer", color: "#94a3b8" }}
+                        tabIndex={-1}
+                      >
+                        {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label htmlFor="confirm-password" style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "6px" }}>Confirm Password</label>
                     <Input
-                      id="new-password"
-                      type={showPw ? "text" : "password"}
-                      placeholder="At least 8 characters"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="pr-10"
+                      id="confirm-password"
+                      type="password"
+                      placeholder="Repeat your password"
+                      value={confirm}
+                      onChange={(e) => setConfirm(e.target.value)}
+                      style={{ height: "44px", fontSize: "14px", borderRadius: "10px" }}
                       required
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowPw((v) => !v)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                      tabIndex={-1}
-                    >
-                      {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
                   </div>
-                </div>
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="confirm-password">Confirm Password</Label>
-                  <Input
-                    id="confirm-password"
-                    type="password"
-                    placeholder="Repeat your password"
-                    value={confirm}
-                    onChange={(e) => setConfirm(e.target.value)}
-                    required
-                  />
-                </div>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    style={{ width: "100%", height: "46px", borderRadius: "10px", marginTop: "8px", background: "linear-gradient(135deg, #0a0000 0%, #990000 50%, #cc0000 100%)", color: "#ffffff", fontWeight: 700, fontSize: "14px", border: "none", cursor: loading ? "not-allowed" : "pointer", boxShadow: "0 4px 16px rgba(204,0,0,0.40)", transition: "all 0.2s", opacity: loading ? 0.75 : 1, letterSpacing: "0.02em" }}
+                    onMouseEnter={(e) => { if (!loading) { (e.currentTarget as HTMLElement).style.boxShadow = "0 4px 20px rgba(202,138,4,0.45)"; (e.currentTarget as HTMLElement).style.transform = "translateY(-1px)"; }}}
+                    onMouseLeave={(e) => { if (!loading) { (e.currentTarget as HTMLElement).style.boxShadow = "0 4px 16px rgba(204,0,0,0.40)"; (e.currentTarget as HTMLElement).style.transform = "translateY(0)"; }}}
+                  >
+                    {loading ? "Saving…" : "Set New Password"}
+                  </button>
 
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? "Saving..." : "Set New Password"}
-                </Button>
-
-                <p className="text-center text-sm text-gray-500">
-                  <Link to="/portal/forgot-password" className="text-blue-600 hover:underline">
-                    Request a new link
-                  </Link>
-                </p>
-              </form>
+                  <p style={{ textAlign: "center", fontSize: "13px", color: "#6b7280", margin: "8px 0 0" }}>
+                    <Link
+                      to="/portal/forgot-password"
+                      style={{ color: "#ca8a04", fontWeight: 600, textDecoration: "none" }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "#990000"; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "#ca8a04"; }}
+                    >
+                      Request a new link
+                    </Link>
+                  </p>
+                </form>
+              </>
             )}
-          </CardContent>
-        </Card>
+          </div>
+          <p style={{ marginTop: "24px", textAlign: "center", fontSize: "12px", color: "#9ca3af" }}>Right Tracker · WisRight Internal Platform</p>
+        </div>
       </main>
     </div>
   );

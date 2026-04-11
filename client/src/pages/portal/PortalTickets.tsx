@@ -56,12 +56,12 @@ const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
 ];
 
 const STATUS_STYLE: Record<string, { bg: string; text: string; dot: string }> = {
-  UN_ASSIGNED:      { bg: "bg-gray-100",   text: "text-gray-600",  dot: "bg-gray-400"   },
-  OPEN_NOT_STARTED: { bg: "bg-amber-50",   text: "text-amber-700", dot: "bg-amber-400"  },
-  OPEN_IN_PROGRESS: { bg: "bg-blue-50",    text: "text-blue-700",  dot: "bg-blue-500"   },
-  OPEN_QA:          { bg: "bg-purple-50",  text: "text-purple-700",dot: "bg-purple-500" },
-  OPEN_DONE:        { bg: "bg-teal-50",    text: "text-teal-700",  dot: "bg-teal-500"   },
-  CLOSED:           { bg: "bg-green-50",   text: "text-green-700", dot: "bg-green-500"  },
+  UN_ASSIGNED:      { bg: "bg-gray-100",   text: "text-gray-600",   dot: "bg-gray-400"   },
+  OPEN_NOT_STARTED: { bg: "bg-amber-50",   text: "text-amber-700",  dot: "bg-amber-400"  },
+  OPEN_IN_PROGRESS: { bg: "bg-blue-50",    text: "text-blue-700",   dot: "bg-blue-500"   },
+  OPEN_QA:          { bg: "bg-purple-50",  text: "text-purple-700", dot: "bg-purple-500" },
+  OPEN_DONE:        { bg: "bg-teal-50",    text: "text-teal-700",   dot: "bg-teal-500"   },
+  CLOSED:           { bg: "bg-green-50",   text: "text-green-700",  dot: "bg-green-500"  },
 };
 
 function statusLabel(s: string): string {
@@ -100,7 +100,7 @@ function formatDate(iso: string): string {
 
 function ListView({ tickets }: { tickets: PortalTicket[] }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
+    <div className="bg-card border border-border rounded-xl overflow-x-auto">
       <table className="w-full min-w-[600px] table-fixed text-sm">
         <colgroup>
           <col className="w-[10%]" />  {/* ID */}
@@ -110,21 +110,21 @@ function ListView({ tickets }: { tickets: PortalTicket[] }) {
           <col className="w-[18%]" />  {/* Last Updated */}
         </colgroup>
         <thead>
-          <tr className="border-b border-gray-100 bg-gray-50/60">
-            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">ID</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Subject</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Created</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Last Updated</th>
+          <tr className="border-b border-border bg-muted/60">
+            <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">ID</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Subject</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Status</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Created</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Last Updated</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-50">
+        <tbody className="divide-y divide-border">
           {tickets.map((ticket) => (
-            <tr key={ticket.id} className="group hover:bg-orange-50/30 transition-colors">
+            <tr key={ticket.id} className="group hover:bg-accent/5 transition-colors">
               <td className="px-4 py-3.5 whitespace-nowrap">
                 <Link
                   to={`/portal/tickets/${ticket.ticketId}`}
-                  className="font-mono text-xs font-bold text-orange-500 hover:text-orange-600"
+                  className="font-mono text-xs font-bold text-yellow-600 hover:text-yellow-700"
                 >
                   {ticket.ticketId}
                 </Link>
@@ -132,7 +132,7 @@ function ListView({ tickets }: { tickets: PortalTicket[] }) {
               <td className="px-4 py-3.5">
                 <Link
                   to={`/portal/tickets/${ticket.ticketId}`}
-                  className="text-gray-800 font-medium hover:text-orange-600 transition-colors line-clamp-1 group-hover:underline"
+                  className="text-foreground font-medium hover:text-yellow-700 transition-colors line-clamp-1 group-hover:underline"
                 >
                   {ticket.title}
                 </Link>
@@ -140,12 +140,12 @@ function ListView({ tickets }: { tickets: PortalTicket[] }) {
               <td className="px-4 py-3.5 whitespace-nowrap">
                 <StatusBadge status={ticket.status} />
               </td>
-              <td className="px-4 py-3.5 whitespace-nowrap text-xs text-gray-400">
+              <td className="px-4 py-3.5 whitespace-nowrap text-xs text-muted-foreground">
                 {formatDate(ticket.createdAt)}
               </td>
-              <td className="px-4 py-3.5 whitespace-nowrap text-xs text-gray-400">
+              <td className="px-4 py-3.5 whitespace-nowrap text-xs text-muted-foreground">
                 <span title={formatDate(ticket.updatedAt)}>{formatDate(ticket.updatedAt)}</span>
-                <span className="block text-gray-300 mt-0.5">{timeAgo(ticket.updatedAt)}</span>
+                <span className="block text-muted-foreground mt-0.5">{timeAgo(ticket.updatedAt)}</span>
               </td>
             </tr>
           ))}
@@ -164,20 +164,20 @@ function GridView({ tickets }: { tickets: PortalTicket[] }) {
         <Link
           key={ticket.id}
           to={`/portal/tickets/${ticket.ticketId}`}
-          className="block bg-white rounded-xl border border-gray-200 p-5 hover:border-orange-200 hover:shadow-md transition-all group"
+          className="block bg-white rounded-xl border border-gray-200 p-5 hover:border-accent/50 hover:shadow-md transition-all group"
         >
           <div className="flex items-start justify-between gap-2 mb-3">
-            <span className="font-mono text-xs font-bold text-orange-500">
+            <span className="font-mono text-xs font-bold text-yellow-600">
               {ticket.ticketId}
             </span>
             <StatusBadge status={ticket.status} />
           </div>
-          <p className="text-sm font-semibold text-gray-900 line-clamp-2 mb-4 group-hover:text-orange-600 transition-colors">
+          <p className="text-sm font-semibold text-foreground line-clamp-2 mb-4 group-hover:text-yellow-700 transition-colors">
             {ticket.title}
           </p>
           <div className="flex items-center justify-between">
             <StatusBadge status={ticket.status} />
-            <span className="text-xs text-gray-400">{timeAgo(ticket.updatedAt)}</span>
+            <span className="text-xs text-muted-foreground">{timeAgo(ticket.updatedAt)}</span>
           </div>
         </Link>
       ))}
@@ -189,10 +189,10 @@ function GridView({ tickets }: { tickets: PortalTicket[] }) {
 
 function SkeletonRows() {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
+    <div className="bg-card border border-border rounded-xl overflow-x-auto">
       <table className="w-full min-w-[600px] table-fixed text-sm">
         <thead>
-          <tr className="border-b border-gray-100 bg-gray-50/60">
+          <tr className="border-b border-border bg-muted/60">
             {["ID", "Subject", "Status", "Created", "Last Updated"].map((h) => (
               <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">
                 {h}
@@ -200,7 +200,7 @@ function SkeletonRows() {
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-50">
+        <tbody className="divide-y divide-border">
           {Array.from({ length: 5 }).map((_, i) => (
             <tr key={i}>
               {[70, 220, 90, 70, 90, 70].map((w, j) => (
@@ -287,11 +287,11 @@ function SubmitTicketModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 relative max-h-[90vh] overflow-y-auto">
+      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-lg p-6 relative max-h-[90vh] overflow-y-auto">
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-4 right-4 p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+          className="absolute top-4 right-4 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
         >
           <X className="w-4 h-4" />
         </button>
@@ -303,15 +303,15 @@ function SubmitTicketModal({ onClose }: { onClose: () => void }) {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Ticket Submitted!</h2>
-            <p className="text-gray-600 mb-1">
-              Ticket <span className="font-mono font-semibold text-orange-500">{submitted}</span> has been created.
+            <h2 className="text-xl font-bold text-foreground mb-2">Ticket Submitted!</h2>
+            <p className="text-muted-foreground mb-1">
+              Ticket <span className="font-mono font-semibold text-yellow-600">{submitted}</span> has been created.
             </p>
             <p className="text-sm text-gray-400 mb-6">Our team will get back to you shortly.</p>
             <button
               type="button"
               onClick={onClose}
-              className="bg-orange-500 text-white px-6 py-2.5 rounded-lg hover:bg-orange-600 transition-colors font-medium"
+              className="bg-yellow-600 text-white px-6 py-2.5 rounded-lg hover:bg-yellow-700 transition-colors font-medium"
             >
               Back to My Tickets
             </button>
@@ -324,7 +324,7 @@ function SubmitTicketModal({ onClose }: { onClose: () => void }) {
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Your Name</label>
                 <input
                   {...register("name")}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
                   placeholder="John Smith"
                 />
                 {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name.message}</p>}
@@ -350,7 +350,7 @@ function SubmitTicketModal({ onClose }: { onClose: () => void }) {
                       value={field.value ?? ""}
                       onChange={field.onChange}
                       disabled={projectsLoading}
-                      className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white ${
+                      className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 bg-white ${
                         errors.projectId ? "border-red-400" : "border-gray-200"
                       } ${projectsLoading ? "opacity-50 cursor-not-allowed" : ""}`}
                     >
@@ -368,7 +368,7 @@ function SubmitTicketModal({ onClose }: { onClose: () => void }) {
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Subject</label>
                 <input
                   {...register("subject")}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
                   placeholder="Brief summary of the issue"
                 />
                 {errors.subject && <p className="text-red-500 text-xs mt-1">{errors.subject.message}</p>}
@@ -379,7 +379,7 @@ function SubmitTicketModal({ onClose }: { onClose: () => void }) {
                 <textarea
                   {...register("body")}
                   rows={4}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent resize-none"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent resize-none"
                   placeholder="Describe your issue in detail..."
                 />
                 {errors.body && <p className="text-red-500 text-xs mt-1">{errors.body.message}</p>}
@@ -403,7 +403,7 @@ function SubmitTicketModal({ onClose }: { onClose: () => void }) {
                 <button
                   type="submit"
                   disabled={mutation.isPending || !captchaVerified}
-                  className="flex-1 bg-orange-500 text-white py-2.5 rounded-lg hover:bg-orange-600 disabled:opacity-50 transition-colors font-medium text-sm"
+                  className="flex-1 bg-yellow-600 text-white py-2.5 rounded-lg hover:bg-yellow-700 disabled:opacity-50 transition-colors font-medium text-sm"
                 >
                   {mutation.isPending ? "Submitting…" : "Submit Ticket"}
                 </button>
@@ -497,7 +497,7 @@ export default function PortalTickets() {
         <button
           type="button"
           onClick={() => setShowForm(true)}
-          className="bg-orange-500 text-white text-sm font-medium px-4 py-2.5 rounded-xl hover:bg-orange-600 transition-colors flex items-center gap-2 shadow-sm"
+          className="bg-yellow-600 text-white text-sm font-medium px-4 py-2.5 rounded-xl hover:bg-yellow-700 transition-colors flex items-center gap-2 shadow-sm"
         >
           <span className="text-lg leading-none">+</span>
           Submit a Ticket
@@ -505,7 +505,7 @@ export default function PortalTickets() {
       </div>
 
       {/* ── Filter bar ── */}
-      <div className="bg-white border border-gray-200 rounded-xl p-4 mb-5 space-y-3">
+      <div className="bg-card border border-border rounded-xl p-4 mb-5 space-y-3">
         {/* Row 1: Search + sort + view toggle */}
         <div className="flex flex-wrap items-center gap-2">
           {/* Search */}
@@ -516,7 +516,7 @@ export default function PortalTickets() {
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               placeholder="Search tickets…"
-              className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
+              className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
             />
           </div>
 
@@ -524,23 +524,23 @@ export default function PortalTickets() {
           <div className="flex flex-wrap items-center gap-2">
             {/* Date from */}
             <div className="flex items-center gap-1.5">
-              <span className="text-xs text-gray-400 whitespace-nowrap">From</span>
+              <span className="text-xs text-muted-foreground whitespace-nowrap">From</span>
               <input
                 type="date"
                 value={dateFrom}
                 onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
-                className="text-sm border border-gray-200 rounded-lg px-2.5 py-2 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                className="text-sm border border-gray-200 rounded-lg px-2.5 py-2 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-yellow-500"
               />
             </div>
 
             {/* Date to */}
             <div className="flex items-center gap-1.5">
-              <span className="text-xs text-gray-400 whitespace-nowrap">To</span>
+              <span className="text-xs text-muted-foreground whitespace-nowrap">To</span>
               <input
                 type="date"
                 value={dateTo}
                 onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
-                className="text-sm border border-gray-200 rounded-lg px-2.5 py-2 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                className="text-sm border border-gray-200 rounded-lg px-2.5 py-2 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-yellow-500"
               />
             </div>
           </div>
@@ -589,7 +589,7 @@ export default function PortalTickets() {
                 onClick={() => { setStatusFilter(opt.value); setPage(1); }}
                 className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
                   statusFilter === opt.value
-                    ? "bg-orange-500 text-white"
+                    ? "bg-yellow-600 text-white"
                     : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                 }`}
               >
@@ -621,7 +621,7 @@ export default function PortalTickets() {
       )}
 
       {!isLoading && !isError && tickets.length === 0 && (
-        <div className="bg-white border border-gray-200 rounded-xl flex flex-col items-center justify-center py-20 gap-3 text-center">
+        <div className="bg-card border border-border rounded-xl flex flex-col items-center justify-center py-20 gap-3 text-center">
           <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
             <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -631,14 +631,14 @@ export default function PortalTickets() {
             {hasFilters ? "No tickets match your filters." : "No tickets yet."}
           </p>
           {hasFilters ? (
-            <button type="button" onClick={clearFilters} className="text-sm text-orange-500 hover:underline">
+            <button type="button" onClick={clearFilters} className="text-sm text-yellow-600 hover:underline">
               Clear filters
             </button>
           ) : (
             <button
               type="button"
               onClick={() => setShowForm(true)}
-              className="bg-orange-500 text-white text-sm font-medium px-5 py-2.5 rounded-xl hover:bg-orange-600 transition-colors mt-1"
+              className="bg-yellow-600 text-white text-sm font-medium px-5 py-2.5 rounded-xl hover:bg-yellow-700 transition-colors mt-1"
             >
               + Submit a Ticket
             </button>
@@ -653,25 +653,25 @@ export default function PortalTickets() {
           {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-4">
-              <p className="text-xs sm:text-sm text-gray-400">
-                Page {page} of {totalPages} · {data?.total} tickets
-              </p>
-              <div className="flex gap-2">
+              <span className="text-xs text-muted-foreground">
+                {data?.total} tickets · page {page} of {totalPages}
+              </span>
+              <div className="flex gap-1">
                 <button
                   type="button"
                   disabled={page <= 1}
                   onClick={() => setPage((p) => p - 1)}
-                  className="text-sm border border-gray-200 rounded-lg px-3.5 py-2.5 sm:py-2 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-3"
                 >
-                  ← Prev
+                  Previous
                 </button>
                 <button
                   type="button"
                   disabled={page >= totalPages}
                   onClick={() => setPage((p) => p + 1)}
-                  className="text-sm border border-gray-200 rounded-lg px-3.5 py-2.5 sm:py-2 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-3"
                 >
-                  Next →
+                  Next
                 </button>
               </div>
             </div>

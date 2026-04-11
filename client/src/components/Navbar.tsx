@@ -2,16 +2,13 @@ import { useNavigate } from "react-router-dom";
 import { Link } from "react-router-dom";
 import { useSession, signOut } from "@/lib/auth-client";
 import { ROLES, type UserRole } from "@tms/core";
-import { LogOut, Sun, Moon, UserRound, Menu } from "lucide-react";
-import { useTheme } from "@/contexts/ThemeContext";
+import { LogOut, UserRound, Menu } from "lucide-react";
 
 function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const navigate = useNavigate();
   const { data: session } = useSession();
-  const { theme, toggleTheme } = useTheme();
 
   const isAdmin = (session?.user as { role: UserRole } | undefined)?.role === ROLES.ADMIN;
-  const isDark  = theme === "dark";
 
   const handleSignOut = async () => {
     await signOut();
@@ -21,7 +18,7 @@ function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
   return (
     <header
       style={{
-        background:   "var(--rt-accent)",
+        background:   "linear-gradient(135deg, #0a0000 0%, #660000 35%, #990000 70%, #cc0000 100%)",
         borderBottom: "none",
         position:     "sticky",
         top:          0,
@@ -29,7 +26,7 @@ function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
         flexShrink:   0,
       }}
     >
-      <div className="flex items-center px-4" style={{ height: "56px" }}>
+      <div className="flex items-center px-4" style={{ height: "64px" }}>
 
         {/* Hamburger — mobile only */}
         <button
@@ -63,22 +60,6 @@ function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
 
         {/* Right side */}
         <div className="flex items-center gap-2">
-
-          {/* Theme toggle */}
-          <button
-            onClick={toggleTheme}
-            className="flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200"
-            title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-            style={{
-              background: "rgba(0,0,0,0.12)",
-              border:     "1px solid rgba(255,255,255,0.2)",
-              color:      "#ffffff",
-            }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(0,0,0,0.22)"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(0,0,0,0.12)"; }}
-          >
-            {isDark ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
-          </button>
 
           {/* Divider */}
           <div style={{ width: "1px", height: "20px", background: "rgba(255,255,255,0.25)" }} />

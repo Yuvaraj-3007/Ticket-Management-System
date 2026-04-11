@@ -164,7 +164,7 @@ function KpiCard({ label, value, sub, icon, accent = "blue" }: KpiCardProps) {
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">{label}</p>
-            <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">{value}</p>
+            <p className="text-3xl font-bold text-foreground">{value}</p>
             {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
           </div>
           <div className={`flex-shrink-0 ml-3 p-2.5 rounded-lg ${ACCENT_BG[accent]}`}>
@@ -185,7 +185,7 @@ function StarRating({ rating, size = "sm" }: { rating: number; size?: "sm" | "lg
       {Array.from({ length: 5 }).map((_, i) => (
         <svg
           key={i}
-          className={`${sz} ${i < Math.round(rating) ? "text-amber-400" : "text-gray-200"}`}
+          className={`${sz} ${i < Math.round(rating) ? "text-amber-400" : "text-muted-foreground/30"}`}
           fill="currentColor"
           viewBox="0 0 20 20"
         >
@@ -293,25 +293,25 @@ function Dashboard() {
                 data={stats?.dailyCounts ?? []}
                 margin={{ top: 4, right: 8, left: -16, bottom: 0 }}
               >
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--rt-border)" />
                 <XAxis
                   dataKey="date"
                   tickFormatter={formatChartDate}
-                  tick={{ fontSize: 11, fill: "#6b7280" }}
+                  tick={{ fontSize: 11, fill: "var(--rt-text-3)" }}
                   tickLine={false}
                   axisLine={false}
                   interval={4}
                 />
                 <YAxis
                   allowDecimals={false}
-                  tick={{ fontSize: 11, fill: "#6b7280" }}
+                  tick={{ fontSize: 11, fill: "var(--rt-text-3)" }}
                   tickLine={false}
                   axisLine={false}
                 />
                 <Tooltip
                   formatter={(value) => [Number(value), "Tickets"]}
                   labelFormatter={(label) => formatChartDate(String(label))}
-                  cursor={{ fill: "#f3f4f6" }}
+                  cursor={{ fill: "var(--rt-surface-2)" }}
                 />
                 <Bar dataKey="count" fill="#3b82f6" radius={[3, 3, 0, 0]} />
               </BarChart>
@@ -335,18 +335,18 @@ function Dashboard() {
             ) : !stats?.clientRecentTickets?.length ? (
               <p className="px-6 py-4 text-sm text-muted-foreground">No client tickets available.</p>
             ) : (
-              <ul className="divide-y divide-gray-50">
+              <ul className="divide-y divide-border">
                 {stats.clientRecentTickets.map((item) => (
-                  <li key={item.ticketId} className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
+                  <li key={item.ticketId} className="flex items-start gap-3 px-4 py-3 hover:bg-muted transition-colors">
                     <span className={`mt-1.5 flex-shrink-0 w-2 h-2 rounded-full ${STATUS_DOT[item.status] ?? "bg-gray-400"}`} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-mono text-xs text-muted-foreground">{item.ticketId}</span>
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
                           {STATUS_LABELS[item.status] ?? item.status}
                         </span>
                       </div>
-                      <p className="text-sm text-gray-900 mt-0.5 truncate">{item.title}</p>
+                      <p className="text-sm text-foreground mt-0.5 truncate">{item.title}</p>
                       <p className="text-xs text-muted-foreground mt-0.5 font-medium" style={{ color: "var(--rt-accent)" }}>
                         {item.clientName}
                       </p>
@@ -414,9 +414,9 @@ function Dashboard() {
                     layout="vertical"
                     margin={{ top: 0, right: 16, left: 8, bottom: 0 }}
                   >
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e5e7eb" />
-                    <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: "#6b7280" }} tickLine={false} axisLine={false} />
-                    <YAxis type="category" dataKey="priority" tickFormatter={(v) => PRIORITY_LABELS_MAP[v] ?? v} tick={{ fontSize: 11, fill: "#6b7280" }} tickLine={false} axisLine={false} width={64} />
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--rt-border)" />
+                    <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: "var(--rt-text-3)" }} tickLine={false} axisLine={false} />
+                    <YAxis type="category" dataKey="priority" tickFormatter={(v) => PRIORITY_LABELS_MAP[v] ?? v} tick={{ fontSize: 11, fill: "var(--rt-text-3)" }} tickLine={false} axisLine={false} width={64} />
                     <Tooltip formatter={(v) => [v, "Tickets"]} labelFormatter={(l) => PRIORITY_LABELS_MAP[l] ?? l} />
                     <Bar dataKey="count" radius={[0, 3, 3, 0]}>
                       {PRIORITY_ORDER.map((p) => (

@@ -13,8 +13,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ImageUploadField } from "@/components/portal/ImageUploadField";
-import { Sun, Moon } from "lucide-react";
-import { useTheme } from "@/contexts/ThemeContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -50,8 +48,6 @@ type SubmitFormData = z.infer<typeof submitSchema>;
 export default function PortalSubmit() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { theme, toggleTheme } = useTheme();
-  const isDark = theme === "dark";
   const { data: session, isPending: sessionPending } = useSession();
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
   const [captchaVerified, setCaptchaVerified] = useState(false);
@@ -254,16 +250,6 @@ export default function PortalSubmit() {
             >
               Sign in
             </Link>
-            <button
-              onClick={toggleTheme}
-              className="flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200"
-              title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-              style={{ background: "rgba(0,0,0,0.12)", border: "1px solid rgba(255,255,255,0.2)", color: "#ffffff" }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(0,0,0,0.22)"; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(0,0,0,0.12)"; }}
-            >
-              {isDark ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
-            </button>
           </div>
         </div>
       </header>

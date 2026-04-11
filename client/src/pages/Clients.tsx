@@ -2,8 +2,9 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import axios from "axios";
-import { Building2, Copy, Check, ExternalLink, Tickets, ChevronLeft, ChevronRight } from "lucide-react";
+import { Building2, Copy, Check, ExternalLink, Tickets } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import {
@@ -120,10 +121,10 @@ export default function Clients() {
       </div>
 
       {/* Table */}
-      <div className="border rounded-lg overflow-hidden" style={{ background: "#ffffff" }}>
+      <div className="border rounded-lg overflow-hidden bg-card">
         <div className="overflow-x-auto">
           <Table className="min-w-[600px]">
-            <TableHeader style={{ background: "#f9fafb" }}>
+            <TableHeader style={{ background: "var(--rt-surface-2)" }}>
               <TableRow>
                 <TableHead className="font-bold text-xs uppercase tracking-wide" style={{ color: "var(--rt-text-1)" }}>
                   Client Name
@@ -241,42 +242,16 @@ export default function Clients() {
       {/* Pagination */}
       {!isLoading && !isError && filtered.length > PAGE_SIZE && (
         <div className="flex items-center justify-between mt-4">
-          <p className="text-xs" style={{ color: "var(--rt-text-3)" }}>
-            Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length} clients
-          </p>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="flex items-center justify-center w-9 h-9 sm:w-8 sm:h-8 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              style={{ border: "1px solid var(--rt-border)", background: "var(--rt-surface)" }}
-            >
-              <ChevronLeft className="h-4 w-4" style={{ color: "var(--rt-text-2)" }} />
-            </button>
-
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-              <button
-                key={p}
-                onClick={() => setPage(p)}
-                className="flex items-center justify-center w-9 h-9 sm:w-8 sm:h-8 rounded-md text-xs font-medium transition-colors"
-                style={{
-                  background: p === currentPage ? "var(--rt-accent)"    : "var(--rt-surface)",
-                  color:      p === currentPage ? "#ffffff"              : "var(--rt-text-2)",
-                  border:     `1px solid ${p === currentPage ? "var(--rt-accent)" : "var(--rt-border)"}`,
-                }}
-              >
-                {p}
-              </button>
-            ))}
-
-            <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-              className="flex items-center justify-center w-9 h-9 sm:w-8 sm:h-8 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              style={{ border: "1px solid var(--rt-border)", background: "var(--rt-surface)" }}
-            >
-              <ChevronRight className="h-4 w-4" style={{ color: "var(--rt-text-2)" }} />
-            </button>
+          <span className="text-xs text-muted-foreground">
+            {filtered.length} clients · page {currentPage} of {totalPages}
+          </span>
+          <div className="flex gap-1">
+            <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+              Previous
+            </Button>
+            <Button variant="outline" size="sm" disabled={currentPage === totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>
+              Next
+            </Button>
           </div>
         </div>
       )}

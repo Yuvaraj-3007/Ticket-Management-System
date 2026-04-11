@@ -30,6 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   ChevronUp,
@@ -37,8 +38,6 @@ import {
   ChevronsUpDown,
   X,
   Search,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react";
 
 const API_URL = import.meta.env.VITE_API_URL || "";
@@ -566,7 +565,7 @@ function Tickets() {
                 {table.getHeaderGroups().map((hg) => (
                   <tr
                     key={hg.id}
-                    style={{ borderBottom: "1px solid var(--rt-border)", background: "#f9fafb" }}
+                    style={{ borderBottom: "1px solid var(--rt-border)", background: "var(--rt-surface-2)" }}
                   >
                     {hg.headers.map((header) => {
                       const canSort = header.column.getCanSort();
@@ -625,7 +624,7 @@ function Tickets() {
                         key={row.id}
                         style={{ borderBottom: "1px solid var(--rt-border)", transition: "background 0.1s" }}
                         onMouseEnter={(e) =>
-                          ((e.currentTarget as HTMLElement).style.background = "#fff9f6")
+                          ((e.currentTarget as HTMLElement).style.background = "var(--rt-surface-2)")
                         }
                         onMouseLeave={(e) =>
                           ((e.currentTarget as HTMLElement).style.background = "transparent")
@@ -649,70 +648,26 @@ function Tickets() {
         {!isLoading && !isError && (
           <div className="flex items-center justify-between mt-5">
             <div className="flex items-center gap-3">
-              <span className="text-sm" style={{ color: "var(--rt-text-3)" }}>Rows per page</span>
+              <span className="text-xs text-muted-foreground">Rows per page</span>
               <select
                 value={pagination.pageSize}
                 onChange={(e) => setPagination({ pageIndex: 0, pageSize: Number(e.target.value) })}
-                className="text-sm outline-none rounded-md px-2 py-1 cursor-pointer"
-                style={{
-                  background: "var(--rt-surface-2)",
-                  border:     "1px solid var(--rt-border-2)",
-                  color:      "var(--rt-text-2)",
-                }}
+                className="text-xs outline-none rounded-md px-2 py-1 cursor-pointer border"
               >
                 {[10, 20, 50].map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
             </div>
-
             <div className="flex items-center gap-3">
-              <span className="text-sm font-mono" style={{ color: "var(--rt-text-3)" }}>
-                {pagination.pageIndex + 1} / {totalPages || 1}
+              <span className="text-xs text-muted-foreground">
+                {total} tickets · page {pagination.pageIndex + 1} of {totalPages || 1}
               </span>
               <div className="flex gap-1">
-                <button
-                  onClick={() => table.previousPage()}
-                  disabled={!table.getCanPreviousPage()}
-                  className="flex items-center gap-1 px-3 py-2.5 sm:py-1.5 text-xs rounded-lg disabled:opacity-25 disabled:cursor-not-allowed transition-all duration-150"
-                  style={{
-                    background: "var(--rt-surface-2)",
-                    border:     "1px solid var(--rt-border-2)",
-                    color:      "var(--rt-text-2)",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!table.getCanPreviousPage()) return;
-                    (e.currentTarget as HTMLElement).style.borderColor = "var(--rt-accent)";
-                    (e.currentTarget as HTMLElement).style.color       = "var(--rt-accent)";
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLElement).style.borderColor = "var(--rt-border-2)";
-                    (e.currentTarget as HTMLElement).style.color       = "var(--rt-text-2)";
-                  }}
-                >
-                  <ChevronLeft className="h-3.5 w-3.5" />
+                <Button variant="outline" size="sm" disabled={!table.getCanPreviousPage()} onClick={() => table.previousPage()}>
                   Previous
-                </button>
-                <button
-                  onClick={() => table.nextPage()}
-                  disabled={!table.getCanNextPage()}
-                  className="flex items-center gap-1 px-3 py-2.5 sm:py-1.5 text-xs rounded-lg disabled:opacity-25 disabled:cursor-not-allowed transition-all duration-150"
-                  style={{
-                    background: "var(--rt-surface-2)",
-                    border:     "1px solid var(--rt-border-2)",
-                    color:      "var(--rt-text-2)",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!table.getCanNextPage()) return;
-                    (e.currentTarget as HTMLElement).style.borderColor = "var(--rt-accent)";
-                    (e.currentTarget as HTMLElement).style.color       = "var(--rt-accent)";
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLElement).style.borderColor = "var(--rt-border-2)";
-                    (e.currentTarget as HTMLElement).style.color       = "var(--rt-text-2)";
-                  }}
-                >
+                </Button>
+                <Button variant="outline" size="sm" disabled={!table.getCanNextPage()} onClick={() => table.nextPage()}>
                   Next
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </button>
+                </Button>
               </div>
             </div>
           </div>

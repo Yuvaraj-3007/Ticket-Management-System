@@ -309,21 +309,21 @@ export default function AgentDetail() {
           <CardContent>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={monthlyTrend} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--rt-border)" />
                 <XAxis
                   dataKey="month"
                   fontSize={11}
-                  fill="#6b7280"
+                  fill="var(--rt-text-3)"
                   tickLine={false}
                   axisLine={false}
-                  tick={{ fontSize: 11, fill: "#6b7280" }}
+                  tick={{ fontSize: 11, fill: "var(--rt-text-3)" }}
                 />
                 <YAxis
                   fontSize={11}
-                  fill="#6b7280"
+                  fill="var(--rt-text-3)"
                   tickLine={false}
                   axisLine={false}
-                  tick={{ fontSize: 11, fill: "#6b7280" }}
+                  tick={{ fontSize: 11, fill: "var(--rt-text-3)" }}
                   allowDecimals={false}
                 />
                 <Tooltip />
@@ -355,20 +355,20 @@ export default function AgentDetail() {
                 <XAxis
                   type="number"
                   fontSize={11}
-                  fill="#6b7280"
+                  fill="var(--rt-text-3)"
                   tickLine={false}
                   axisLine={false}
-                  tick={{ fontSize: 11, fill: "#6b7280" }}
+                  tick={{ fontSize: 11, fill: "var(--rt-text-3)" }}
                   allowDecimals={false}
                 />
                 <YAxis
                   type="category"
                   dataKey="status"
                   fontSize={11}
-                  fill="#6b7280"
+                  fill="var(--rt-text-3)"
                   tickLine={false}
                   axisLine={false}
-                  tick={{ fontSize: 11, fill: "#6b7280" }}
+                  tick={{ fontSize: 11, fill: "var(--rt-text-3)" }}
                   width={90}
                 />
                 <Tooltip />
@@ -406,20 +406,20 @@ export default function AgentDetail() {
                 <XAxis
                   type="number"
                   fontSize={11}
-                  fill="#6b7280"
+                  fill="var(--rt-text-3)"
                   tickLine={false}
                   axisLine={false}
-                  tick={{ fontSize: 11, fill: "#6b7280" }}
+                  tick={{ fontSize: 11, fill: "var(--rt-text-3)" }}
                   allowDecimals={false}
                 />
                 <YAxis
                   type="category"
                   dataKey="project"
                   fontSize={11}
-                  fill="#6b7280"
+                  fill="var(--rt-text-3)"
                   tickLine={false}
                   axisLine={false}
-                  tick={{ fontSize: 11, fill: "#6b7280" }}
+                  tick={{ fontSize: 11, fill: "var(--rt-text-3)" }}
                   width={100}
                 />
                 <Tooltip />
@@ -449,20 +449,20 @@ export default function AgentDetail() {
                 <XAxis
                   type="number"
                   fontSize={11}
-                  fill="#6b7280"
+                  fill="var(--rt-text-3)"
                   tickLine={false}
                   axisLine={false}
-                  tick={{ fontSize: 11, fill: "#6b7280" }}
+                  tick={{ fontSize: 11, fill: "var(--rt-text-3)" }}
                   allowDecimals={false}
                 />
                 <YAxis
                   type="category"
                   dataKey="type"
                   fontSize={11}
-                  fill="#6b7280"
+                  fill="var(--rt-text-3)"
                   tickLine={false}
                   axisLine={false}
-                  tick={{ fontSize: 11, fill: "#6b7280" }}
+                  tick={{ fontSize: 11, fill: "var(--rt-text-3)" }}
                   width={90}
                 />
                 <Tooltip />
@@ -487,7 +487,7 @@ export default function AgentDetail() {
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <Table className="min-w-[700px]">
-              <TableHeader style={{ background: "#f9fafb" }}>
+              <TableHeader style={{ background: "var(--rt-surface-2)" }}>
                 <TableRow>
                   <TableHead className="font-bold text-xs uppercase tracking-wide" style={{ color: "var(--rt-text-1)" }}>Ticket ID</TableHead>
                   <TableHead className="font-bold text-xs uppercase tracking-wide" style={{ color: "var(--rt-text-1)" }}>Title</TableHead>

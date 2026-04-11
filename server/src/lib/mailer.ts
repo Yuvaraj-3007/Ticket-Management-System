@@ -47,7 +47,7 @@ export async function sendReplyEmail(opts: SendReplyEmailOptions): Promise<void>
   const safeTitle       = ticketTitle.replace(/[\r\n]/g, " ");
   const safeAgentName   = agentName.replace(/[\r\n]/g, " ");
   const safeBody        = commentContent.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  const subject = `Re: ${safeTitle}`;
+  const subject = `[${ticketId}] Re: ${safeTitle}`;
   const text = [
     safeBody,
     "",

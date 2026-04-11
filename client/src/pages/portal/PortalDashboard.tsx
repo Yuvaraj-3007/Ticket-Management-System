@@ -49,7 +49,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const STATUS_BADGE: Record<string, string> = {
-  UN_ASSIGNED:      "bg-gray-100 text-gray-600",
+  UN_ASSIGNED:      "bg-muted text-muted-foreground",
   OPEN_NOT_STARTED: "bg-amber-100 text-amber-700",
   OPEN_IN_PROGRESS: "bg-blue-100 text-blue-700",
   OPEN_QA:          "bg-purple-100 text-purple-700",
@@ -58,9 +58,9 @@ const STATUS_BADGE: Record<string, string> = {
 };
 
 const PRIORITY_BADGE: Record<string, string> = {
-  LOW:      "bg-gray-100 text-gray-500",
+  LOW:      "bg-muted text-muted-foreground",
   MEDIUM:   "bg-yellow-100 text-yellow-700",
-  HIGH:     "bg-orange-100 text-orange-700",
+  HIGH:     "bg-yellow-100 text-yellow-700",
   CRITICAL: "bg-red-100 text-red-700",
 };
 
@@ -79,19 +79,19 @@ function SummaryCard({ label, value, accent, loading }: {
   label: string; value: number; accent?: boolean; loading: boolean;
 }) {
   return (
-    <div className={`rounded-xl border p-5 ${accent ? "bg-orange-500 text-white border-orange-500" : "bg-white border-gray-200"}`}>
-      <p className={`text-xs font-medium uppercase tracking-wide mb-1 ${accent ? "text-orange-100" : "text-gray-500"}`}>{label}</p>
-      <p className={`text-3xl font-bold ${accent ? "text-white" : "text-gray-900"}`}>{loading ? "—" : value}</p>
+    <div className={`rounded-xl border p-5 ${accent ? "bg-yellow-600 text-white border-yellow-600" : "bg-card border-border"}`}>
+      <p className={`text-xs font-medium uppercase tracking-wide mb-1 ${accent ? "text-yellow-100" : "text-muted-foreground"}`}>{label}</p>
+      <p className={`text-3xl font-bold ${accent ? "text-white" : "text-foreground"}`}>{loading ? "—" : value}</p>
     </div>
   );
 }
 
 function SectionHeader({ title }: { title: string }) {
-  return <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-4">{title}</h2>;
+  return <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">{title}</h2>;
 }
 
 function Skeleton({ className }: { className?: string }) {
-  return <div className={`animate-pulse bg-gray-100 rounded-lg ${className ?? ""}`} />;
+  return <div className={`animate-pulse bg-muted rounded-lg ${className ?? ""}`} />;
 }
 
 // ─── Status bar row ───────────────────────────────────────────────────────────
@@ -101,10 +101,10 @@ function StatusBar({ label, count, total, color }: { label: string; count: numbe
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between text-xs">
-        <span className="text-gray-600 font-medium">{label}</span>
-        <span className="font-bold text-gray-900">{count}</span>
+        <span className="text-muted-foreground font-medium">{label}</span>
+        <span className="font-bold text-foreground">{count}</span>
       </div>
-      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+      <div className="h-2 bg-muted rounded-full overflow-hidden">
         <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: color }} />
       </div>
     </div>
@@ -141,14 +141,14 @@ export default function PortalDashboard() {
 
       {/* Page title */}
       <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Dashboard</h1>
+        <p className="text-sm text-muted-foreground mt-1">
           {now.toLocaleString("default", { month: "long", year: "numeric" })} overview of your support tickets
         </p>
       </div>
 
       {isError && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm p-4 rounded-lg">
+        <div className="bg-destructive/10 text-destructive border border-destructive/30 text-sm p-4 rounded-lg">
           Failed to load dashboard. Please refresh the page.
         </div>
       )}
@@ -168,7 +168,7 @@ export default function PortalDashboard() {
         <div className="lg:col-span-2 bg-white border border-gray-200 rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
             <SectionHeader title="My Active Tickets" />
-            <Link to="/portal/tickets" className="text-xs font-medium text-orange-500 hover:text-orange-600">
+            <Link to="/portal/tickets" className="text-xs font-medium text-yellow-600 hover:text-yellow-700">
               View all →
             </Link>
           </div>
@@ -181,35 +181,35 @@ export default function PortalDashboard() {
 
           {!isLoading && (data?.openTickets ?? []).length === 0 && (
             <div className="flex flex-col items-center justify-center h-40 gap-2 text-center">
-              <p className="text-sm text-gray-400">No active tickets</p>
-              <Link to="/portal/tickets" className="text-xs text-orange-500 hover:underline">
+              <p className="text-sm text-muted-foreground">No active tickets</p>
+              <Link to="/portal/tickets" className="text-xs text-yellow-600 hover:underline">
                 Submit a new ticket →
               </Link>
             </div>
           )}
 
           {!isLoading && (data?.openTickets ?? []).length > 0 && (
-            <div className="divide-y divide-gray-50">
+            <div className="divide-y divide-border">
               {(data?.openTickets ?? []).map((t) => (
                 <Link
                   key={t.id}
                   to={`/portal/tickets/${t.ticketId}`}
-                  className="flex items-center gap-3 py-3 hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors group"
+                  className="flex items-center gap-3 py-3 hover:bg-muted -mx-2 px-2 rounded-lg transition-colors group"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
-                      <span className="font-mono text-xs font-bold text-orange-500">{t.ticketId}</span>
-                      <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${PRIORITY_BADGE[t.priority] ?? "bg-gray-100 text-gray-500"}`}>
+                      <span className="font-mono text-xs font-bold text-yellow-600">{t.ticketId}</span>
+                      <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${PRIORITY_BADGE[t.priority] ?? "bg-muted text-muted-foreground"}`}>
                         {t.priority.charAt(0) + t.priority.slice(1).toLowerCase()}
                       </span>
                     </div>
-                    <p className="text-sm text-gray-800 truncate group-hover:underline">{t.title}</p>
+                    <p className="text-sm text-foreground truncate group-hover:underline">{t.title}</p>
                   </div>
                   <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_BADGE[t.status] ?? "bg-gray-100 text-gray-600"}`}>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_BADGE[t.status] ?? "bg-muted text-muted-foreground"}`}>
                       {STATUS_LABEL[t.status] ?? t.status}
                     </span>
-                    <span className="text-[10px] text-gray-400">{timeAgo(t.updatedAt)}</span>
+                    <span className="text-[10px] text-muted-foreground">{timeAgo(t.updatedAt)}</span>
                   </div>
                 </Link>
               ))}
@@ -225,7 +225,7 @@ export default function PortalDashboard() {
               {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-8 w-full" />)}
             </div>
           ) : total === 0 ? (
-            <div className="flex items-center justify-center h-40 text-sm text-gray-400">No tickets yet</div>
+            <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">No tickets yet</div>
           ) : (
             <div className="space-y-4">
               <StatusBar label="Awaiting Support"  count={sb?.unAssigned ?? 0} total={total} color="#9CA3AF" />
@@ -245,33 +245,33 @@ export default function PortalDashboard() {
         {isLoading ? (
           <Skeleton className="h-40 w-full" />
         ) : !hasBarData ? (
-          <div className="h-40 flex items-center justify-center text-sm text-gray-400">
+          <div className="h-40 flex items-center justify-center text-sm text-muted-foreground">
             No tickets submitted this month
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={160}>
             <BarChart data={barData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }} barSize={8}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F3F4F6" />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--rt-border)" />
               <XAxis
                 dataKey="day"
-                tick={{ fontSize: 10, fill: "#9CA3AF" }}
+                tick={{ fontSize: 10, fill: "var(--rt-text-3)" }}
                 tickLine={false}
                 axisLine={false}
                 interval={Math.floor(daysInMonth / 10)}
               />
               <YAxis
                 allowDecimals={false}
-                tick={{ fontSize: 10, fill: "#9CA3AF" }}
+                tick={{ fontSize: 10, fill: "var(--rt-text-3)" }}
                 tickLine={false}
                 axisLine={false}
               />
               <Tooltip
                 cursor={{ fill: "rgba(0,0,0,0.04)" }}
-                contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e5e7eb" }}
+                contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid var(--rt-border)" }}
                 formatter={(v) => [v ?? 0, "Tickets"]}
                 labelFormatter={(l) => `Day ${l}`}
               />
-              <Bar dataKey="count" fill="#F97316" radius={[3, 3, 0, 0]} />
+              <Bar dataKey="count" fill="#ca8a04" radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         )}

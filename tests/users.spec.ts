@@ -244,3 +244,28 @@ test.describe("HRMS sync — POST /api/users/sync-hrms", () => {
     expect(Array.isArray(body.reactivated)).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// HRMS import endpoint tests
+// ---------------------------------------------------------------------------
+
+test.describe("HRMS import — POST /api/users/import-hrms", () => {
+  test("returns 401 when unauthenticated", async ({ request }) => {
+    const res = await request.post("http://localhost:5001/api/users/import-hrms");
+    expect(res.status()).toBe(401);
+  });
+
+  test("returns a valid ImportResult shape when authenticated as admin", async ({ request }) => {
+    await request.post("http://localhost:5001/api/auth/sign-in/email", {
+      data: { email: "admin@wisright.com", password: "Test@123" },
+    });
+
+    const res = await request.post("http://localhost:5001/api/users/import-hrms");
+    expect(res.status()).toBe(200);
+
+    const body = await res.json();
+    expect(typeof body.skipped).toBe("boolean");
+    expect(typeof body.imported).toBe("number");
+    expect(Array.isArray(body.emails)).toBe(true);
+  });
+});
