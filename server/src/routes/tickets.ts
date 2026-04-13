@@ -11,6 +11,7 @@ import prisma from "../lib/prisma.js";
 import { ticketQuerySchema, assignTicketSchema, updateStatusSchema, updateTypeSchema, updatePrioritySchema, createCommentSchema, polishReplySchema, ROLES, COMMENT_SENDER_TYPES } from "@tms/core";
 import { Prisma } from "../generated/prisma/client.js";
 import { sendReplyEmail } from "../lib/mailer.js";
+import { notifyWiseworkAssignment, notifyWiseworkPriorityUpdate } from "../lib/wisework-notifier.js";
 import { getAllClients, getEmployeeDirectory, getProjectEmployees, type HrmsEmployee } from "../lib/hrms.js";
 import { uploadArray } from "../lib/upload.js";
 
@@ -461,6 +462,25 @@ router.patch("/:id/assignee", async (req: Request<{ id: string }>, res: Response
     select: TICKET_SELECT,
   });
 
+  // Notify Wisework (fire-and-forget — never blocks or throws)
+  if (assignedToId !== null) {
+    const assignedUser = await prisma.user.findUnique({
+      where:  { id: assignedToId },
+      select: { email: true },
+    });
+    if (assignedUser) {
+      const baseUrl = process.env.RIGHT_TRACKER_URL ?? "http://localhost:5173";
+      void notifyWiseworkAssignment({
+        employeeEmail:  assignedUser.email,
+        ticketId:       req.params.id,
+        ticketTitle:    updated.title,
+        ticketUrl:      `${baseUrl}/tickets/${req.params.id}`,
+        priority:       updated.priority,
+        assignedByName: req.user!.name,
+      });
+    }
+  }
+
   res.json(updated);
 });
 
@@ -538,6 +558,9 @@ router.patch("/:id/priority", async (req: Request<{ id: string }>, res: Response
     data:   { priority: parsed.data.priority },
     select: TICKET_SELECT,
   });
+
+  // Notify Wisework to update priority in existing notification (fire-and-forget)
+  void notifyWiseworkPriorityUpdate(req.params.id, parsed.data.priority);
 
   res.json(updated);
 });

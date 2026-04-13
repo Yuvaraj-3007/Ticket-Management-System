@@ -197,9 +197,7 @@ function CommentThread({ comments, sortAsc }: { comments: PortalComment[]; sortA
   const sorted = sortAsc ? [...comments] : [...comments].reverse();
 
   if (sorted.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground text-center py-6">No messages yet.</p>
-    );
+    return null;
   }
 
   return (
