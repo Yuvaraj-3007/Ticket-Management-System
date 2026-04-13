@@ -559,7 +559,7 @@ function Tickets() {
 
         {/* ── Mobile card list (< md) ── */}
         {!isError && (
-          <div className="flex flex-col gap-2 md:hidden">
+          <div className="flex flex-col gap-2 md:hidden" aria-hidden="true">
             {isLoading
               ? Array.from({ length: 6 }).map((_, i) => (
                   <div key={i} className="rounded-xl p-4 animate-pulse" style={{ background: "var(--rt-surface)", border: "1px solid var(--rt-border)" }}>
