@@ -111,6 +111,9 @@
     --status-open-done-dot:         #14B8A6;
     --status-open-done-text:        #0F766E;
     --status-open-done-bg:          rgba(20,184,166,0.10);
+    --status-waiting-for-client-dot:  #F97316;
+    --status-waiting-for-client-text: #7C2D12;
+    --status-waiting-for-client-bg:   rgba(249,115,22,0.10);
     --status-closed-dot:            #22C55E;
     --status-closed-text:           #15803D;
     --status-closed-bg:             rgba(34,197,94,0.10);

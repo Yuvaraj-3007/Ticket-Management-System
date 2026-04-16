@@ -9,7 +9,7 @@ import { SimpleCaptcha } from "@/components/portal/SimpleCaptcha";
 import { useSession } from "@/lib/auth-client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ImageUploadField } from "@/components/portal/ImageUploadField";
-import { Search, LayoutList, LayoutGrid, ArrowUpDown, SlidersHorizontal, X } from "lucide-react";
+import { Search, LayoutList, LayoutGrid, ArrowUpDown, SlidersHorizontal, X, Plus } from "lucide-react";
 
 interface HrmsProject {
   id:          string;
@@ -38,7 +38,7 @@ interface TicketsResponse {
   totalPages: number;
 }
 
-type StatusFilter   = "" | "UN_ASSIGNED" | "OPEN_NOT_STARTED" | "OPEN_IN_PROGRESS" | "OPEN_QA" | "OPEN_DONE" | "CLOSED";
+type StatusFilter   = "" | "UN_ASSIGNED" | "OPEN_NOT_STARTED" | "OPEN_IN_PROGRESS" | "OPEN_QA" | "OPEN_DONE" | "WAITING_FOR_CLIENT" | "CLOSED";
 type PriorityFilter = "" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 type SortOrder      = "desc" | "asc";
 type ViewMode       = "list" | "grid";
@@ -46,22 +46,24 @@ type ViewMode       = "list" | "grid";
 // ─── Status / Priority config ─────────────────────────────────────────────────
 
 const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
-  { value: "",                label: "All"         },
-  { value: "UN_ASSIGNED",     label: "Un-Assigned" },
-  { value: "OPEN_NOT_STARTED",label: "Not Started" },
-  { value: "OPEN_IN_PROGRESS",label: "In Progress" },
-  { value: "OPEN_QA",         label: "QA"          },
-  { value: "OPEN_DONE",       label: "Done"        },
-  { value: "CLOSED",          label: "Closed"      },
+  { value: "",                    label: "All"               },
+  { value: "UN_ASSIGNED",         label: "Un-Assigned"       },
+  { value: "OPEN_NOT_STARTED",    label: "Not Started"       },
+  { value: "OPEN_IN_PROGRESS",    label: "In Progress"       },
+  { value: "OPEN_QA",             label: "QA"                },
+  { value: "OPEN_DONE",           label: "Done"              },
+  { value: "WAITING_FOR_CLIENT",  label: "Waiting for Client"},
+  { value: "CLOSED",              label: "Closed"            },
 ];
 
 const STATUS_STYLE: Record<string, { bg: string; text: string; dot: string }> = {
-  UN_ASSIGNED:      { bg: "bg-gray-100",   text: "text-gray-600",   dot: "bg-gray-400"   },
-  OPEN_NOT_STARTED: { bg: "bg-amber-50",   text: "text-amber-700",  dot: "bg-amber-400"  },
-  OPEN_IN_PROGRESS: { bg: "bg-blue-50",    text: "text-blue-700",   dot: "bg-blue-500"   },
-  OPEN_QA:          { bg: "bg-purple-50",  text: "text-purple-700", dot: "bg-purple-500" },
-  OPEN_DONE:        { bg: "bg-teal-50",    text: "text-teal-700",   dot: "bg-teal-500"   },
-  CLOSED:           { bg: "bg-green-50",   text: "text-green-700",  dot: "bg-green-500"  },
+  UN_ASSIGNED:       { bg: "bg-gray-100",   text: "text-gray-600",   dot: "bg-gray-400"   },
+  OPEN_NOT_STARTED:  { bg: "bg-amber-50",   text: "text-amber-700",  dot: "bg-amber-400"  },
+  OPEN_IN_PROGRESS:  { bg: "bg-blue-50",    text: "text-blue-700",   dot: "bg-blue-500"   },
+  OPEN_QA:           { bg: "bg-purple-50",  text: "text-purple-700", dot: "bg-purple-500" },
+  OPEN_DONE:         { bg: "bg-teal-50",    text: "text-teal-700",   dot: "bg-teal-500"   },
+  WAITING_FOR_CLIENT:{ bg: "bg-orange-50",  text: "text-orange-700", dot: "bg-orange-500" },
+  CLOSED:            { bg: "bg-green-50",   text: "text-green-700",  dot: "bg-green-500"  },
 };
 
 function statusLabel(s: string): string {
@@ -223,16 +225,20 @@ const submitSchema = z.object({
   email:     z.string().email("Valid email required"),
   projectId: z.string().min(1, "Please select a project"),
   subject:   z.string().min(1, "Subject is required"),
-  body:      z.string().min(10, "Please describe your issue (min 10 characters)"),
 });
 type SubmitInput = z.infer<typeof submitSchema>;
 
 function SubmitTicketModal({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
-  const slug     = localStorage.getItem("portal-slug")      ?? "";
+  // Derive slug from the current URL path as the authoritative source;
+  // fall back to localStorage for clients that navigate directly to /portal/tickets
+  const urlSlug  = window.location.pathname.match(/\/portal\/([^/]+)\//)?.[1] ?? "";
+  const slug     = urlSlug || localStorage.getItem("portal-slug") || "";
   const clientId = localStorage.getItem("portal-client-id") ?? "";
-  const [submitted, setSubmitted]           = useState<string | null>(null);
-  const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
+  const [submitted, setSubmitted]             = useState<string | null>(null);
+  const [descriptions, setDescriptions]       = useState<string[]>([""]);
+  const [descErrors,   setDescErrors]         = useState<string[]>([""]);
+  const [attachmentFiles, setAttachmentFiles] = useState<File[][]>([[]]);
   const [captchaVerified, setCaptchaVerified] = useState(false);
   const [captchaToken, setCaptchaToken]       = useState<string | undefined>();
   const [captchaAnswer, setCaptchaAnswer]     = useState<string>("");
@@ -259,24 +265,51 @@ function SubmitTicketModal({ onClose }: { onClose: () => void }) {
     defaultValues: { name: sessionUser?.name ?? "", email: sessionUser?.email ?? "" },
   });
 
+  function addDescription() {
+    setDescriptions((d) => [...d, ""]);
+    setDescErrors((e) => [...e, ""]);
+    setAttachmentFiles((f) => [...f, []]);
+  }
+
+  function removeDescription(idx: number) {
+    setDescriptions((d) => d.filter((_, i) => i !== idx));
+    setDescErrors((e) => e.filter((_, i) => i !== idx));
+    setAttachmentFiles((f) => f.filter((_, i) => i !== idx));
+  }
+
+  function updateDescription(idx: number, value: string) {
+    setDescriptions((d) => d.map((v, i) => (i === idx ? value : v)));
+    setDescErrors((e) => e.map((v, i) => (i === idx ? "" : v)));
+  }
+
+  function updateAttachments(idx: number, files: File[]) {
+    setAttachmentFiles((f) => f.map((v, i) => (i === idx ? files : v)));
+  }
+
   const mutation = useMutation({
     mutationFn: (data: SubmitInput) => {
       const selectedProject = projects.find((p) => p.id === data.projectId);
       const fd = new FormData();
-      fd.append("name",        data.name);
-      fd.append("email",       data.email);
-      fd.append("subject",     data.subject);
-      fd.append("body",        data.body);
-      fd.append("projectId",   data.projectId);
-      fd.append("projectName",  selectedProject?.projectName ?? "");
+      fd.append("name",         data.name);
+      fd.append("email",        data.email);
+      fd.append("subject",      data.subject);
+      fd.append("body",         descriptions.join("\n\n---\n\n"));
+      fd.append("projectId",    data.projectId);
+      fd.append("projectName",   selectedProject?.projectName ?? "");
       fd.append("captchaToken",  captchaToken  ?? "");
       fd.append("captchaAnswer", captchaAnswer ?? "");
-      for (const file of attachmentFiles) fd.append("attachments", file);
+      attachmentFiles.forEach((files, i) => {
+        for (const file of files) {
+          fd.append("attachments", new File([file], `d${i}_${file.name}`, { type: file.type }));
+        }
+      });
       return axios.post(`/api/portal/${slug}/tickets`, fd);
     },
     onSuccess: (res) => {
       setSubmitted(res.data.ticketId);
-      setAttachmentFiles([]);
+      setDescriptions([""]);
+      setDescErrors([""]);
+      setAttachmentFiles([[]]);
       setCaptchaVerified(false);
       setCaptchaToken(undefined);
       setCaptchaAnswer("");
@@ -284,6 +317,15 @@ function SubmitTicketModal({ onClose }: { onClose: () => void }) {
       queryClient.invalidateQueries({ queryKey: ["portal-tickets"] });
     },
   });
+
+  const onSubmit = (data: SubmitInput) => {
+    const errs = descriptions.map((d) =>
+      d.trim().length < 10 ? "Please describe your issue (min 10 characters)" : ""
+    );
+    setDescErrors(errs);
+    if (errs.some(Boolean)) return;
+    mutation.mutate(data);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
@@ -319,7 +361,7 @@ function SubmitTicketModal({ onClose }: { onClose: () => void }) {
         ) : (
           <>
             <h2 className="text-xl font-bold text-gray-900 mb-5">Submit a Support Request</h2>
-            <form onSubmit={handleSubmit((data) => mutation.mutate(data))} className="space-y-4">
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Your Name</label>
                 <input
@@ -374,18 +416,54 @@ function SubmitTicketModal({ onClose }: { onClose: () => void }) {
                 {errors.subject && <p className="text-red-500 text-xs mt-1">{errors.subject.message}</p>}
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Description</label>
-                <textarea
-                  {...register("body")}
-                  rows={4}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent resize-none"
-                  placeholder="Describe your issue in detail..."
-                />
-                {errors.body && <p className="text-red-500 text-xs mt-1">{errors.body.message}</p>}
+              {/* Descriptions — one or more, each with its own image uploader */}
+              <div className="space-y-3">
+                <label className="block text-sm font-medium text-gray-700">Description</label>
+                {descriptions.map((desc, idx) => (
+                  <div key={idx} className="space-y-1.5">
+                    {descriptions.length > 1 && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-gray-500">
+                          Description {idx + 1}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removeDescription(idx)}
+                          className="flex items-center gap-0.5 text-xs text-red-500 hover:text-red-700"
+                        >
+                          <X className="h-3 w-3" />
+                          Remove
+                        </button>
+                      </div>
+                    )}
+                    <textarea
+                      rows={4}
+                      value={desc}
+                      onChange={(e) => updateDescription(idx, e.target.value)}
+                      className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent resize-none ${
+                        descErrors[idx] ? "border-red-400" : "border-gray-200"
+                      }`}
+                      placeholder={idx === 0 ? "Describe your issue in detail..." : "Additional description…"}
+                    />
+                    {descErrors[idx] && (
+                      <p className="text-red-500 text-xs">{descErrors[idx]}</p>
+                    )}
+                    <ImageUploadField
+                      files={attachmentFiles[idx] ?? []}
+                      onChange={(files) => updateAttachments(idx, files)}
+                    />
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={addDescription}
+                  className="flex items-center gap-1.5 text-sm font-medium text-yellow-600 hover:text-yellow-700"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Description
+                </button>
               </div>
 
-              <ImageUploadField files={attachmentFiles} onChange={setAttachmentFiles} />
               <SimpleCaptcha
                 onVerify={(verified, token, answer) => {
                   setCaptchaVerified(verified);

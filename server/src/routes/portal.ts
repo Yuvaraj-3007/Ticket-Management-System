@@ -19,7 +19,8 @@ import prisma from "../lib/prisma.js";
 import { getAllClients, getClientBySlug, getClientProjects } from "../lib/hrms.js";
 import { requireCustomer } from "../middleware/customerAuth.js";
 import { Prisma } from "../generated/prisma/client.js";
-import { uploadArray } from "../lib/upload.js";
+import { uploadArray, validateMagicBytes } from "../lib/upload.js";
+import fs from "node:fs";
 
 const router = Router();
 
@@ -130,7 +131,7 @@ function signCaptcha(ts: string, encryptedCode: string): string {
 const usedCaptchaSignatures = new Set<string>();
 function markCaptchaUsed(sig: string): void {
   usedCaptchaSignatures.add(sig);
-  setTimeout(() => usedCaptchaSignatures.delete(sig), 10 * 60 * 1000 + 5000);
+  setTimeout(() => usedCaptchaSignatures.delete(sig), 5 * 60 * 1000 + 5000);
 }
 
 export function verifyCaptchaToken(token: string, answer: string): boolean {
@@ -138,7 +139,7 @@ export function verifyCaptchaToken(token: string, answer: string): boolean {
   const parts = token.split(".");
   if (parts.length !== 3) return false;
   const [ts, encryptedCode, sig] = parts;
-  if (Date.now() - parseInt(ts, 10) > 10 * 60 * 1000) return false;
+  if (Date.now() - parseInt(ts, 10) > 5 * 60 * 1000) return false;
   if (usedCaptchaSignatures.has(sig)) return false;
   const expected = signCaptcha(ts, encryptedCode);
   let valid = false;
@@ -406,6 +407,14 @@ router.get("/tickets", requireCustomer, async (req, res) => {
       { ticketId:    { contains: q, mode: "insensitive" } },
     ];
   }
+  if (from && isNaN(new Date(from).getTime())) {
+    res.status(400).json({ error: "Invalid 'from' date format" });
+    return;
+  }
+  if (to && isNaN(new Date(to).getTime())) {
+    res.status(400).json({ error: "Invalid 'to' date format" });
+    return;
+  }
   if (from)   where.createdAt = { ...(where.createdAt as any), gte: new Date(from) };
   if (to)     where.createdAt = { ...(where.createdAt as any), lte: new Date(to) };
 
@@ -570,8 +579,24 @@ router.post("/tickets/:id/comments", requireCustomer, async (req: Request<{ id: 
     prisma.ticket.update({ where: { id: ticket.id }, data: { updatedAt: new Date() } }),
   ]);
 
-  // Save comment attachments
+  // H-3 — magic byte validation: reject any file whose actual bytes do not
+  // match a known image signature, even if the extension/MIME passed the gate.
   const uploadedFiles = req.files as Express.Multer.File[] | undefined;
+  if (uploadedFiles && uploadedFiles.length > 0) {
+    for (const f of uploadedFiles) {
+      const valid = await validateMagicBytes(f.path);
+      if (!valid) {
+        // Delete all uploaded files for this request before rejecting
+        await Promise.all(
+          uploadedFiles.map((u) => fs.promises.unlink(u.path).catch(() => undefined)),
+        );
+        res.status(400).json({ error: "One or more files failed file-type validation" });
+        return;
+      }
+    }
+  }
+
+  // Save comment attachments
   if (uploadedFiles && uploadedFiles.length > 0) {
     await prisma.attachment.createMany({
       data: uploadedFiles.map((f) => ({
@@ -659,6 +684,10 @@ router.get("/captcha", captchaLimiter, (_req, res) => {
   res.json(response);
 });
 
+function escXml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":'&#39;'})[c]!);
+}
+
 // GET /captcha-image — serves CAPTCHA challenge as SVG image (no plaintext code sent to client)
 router.get("/captcha-image", captchaLimiter, (req, res) => {
   const token = (req.query["token"] as string) ?? "";
@@ -682,7 +711,7 @@ router.get("/captcha-image", captchaLimiter, (req, res) => {
     const rot   = (seed[i + 10] % 30) - 15;
     const color = COLORS[i % COLORS.length];
     const size  = 20 + (seed[i + 20] % 6);
-    return `<text x="${x}" y="${y}" transform="rotate(${rot},${x},${y})" font-family="'Courier New',monospace" font-size="${size}" font-weight="bold" fill="${color}">${ch}</text>`;
+    return `<text x="${x}" y="${y}" transform="rotate(${rot},${x},${y})" font-family="'Courier New',monospace" font-size="${size}" font-weight="bold" fill="${color}">${escXml(ch)}</text>`;
   });
   const lines = Array.from({ length: 4 }, (_, i) => {
     const b = i * 8;
@@ -759,6 +788,23 @@ router.post("/:slug/tickets", submitLimiter, async (req, res) => {
     }
     res.status(400).json({ error: err instanceof Error ? err.message : "File upload error" });
     return;
+  }
+
+  // H-3 — magic byte validation: reject any file whose actual bytes do not
+  // match a known image signature, even if the extension/MIME passed the gate.
+  const uploadedFiles = req.files as Express.Multer.File[] | undefined;
+  if (uploadedFiles && uploadedFiles.length > 0) {
+    for (const f of uploadedFiles) {
+      const valid = await validateMagicBytes(f.path);
+      if (!valid) {
+        // Delete all uploaded files for this request before rejecting
+        await Promise.all(
+          uploadedFiles.map((u) => fs.promises.unlink(u.path).catch(() => undefined)),
+        );
+        res.status(400).json({ error: "One or more files failed file-type validation" });
+        return;
+      }
+    }
   }
 
   const parsed = portalSubmitSchema.safeParse(req.body);
@@ -839,7 +885,6 @@ router.post("/:slug/tickets", submitLimiter, async (req, res) => {
   }
 
   // Save attachments (outside transaction — ticket is committed)
-  const uploadedFiles = req.files as Express.Multer.File[] | undefined;
   if (uploadedFiles && uploadedFiles.length > 0) {
     try {
       await prisma.attachment.createMany({

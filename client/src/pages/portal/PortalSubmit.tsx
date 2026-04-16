@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import axios from "axios";
+import { Plus, X } from "lucide-react";
 import { SimpleCaptcha } from "@/components/portal/SimpleCaptcha";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,11 +35,10 @@ interface SubmitTicketResponse {
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
 const submitSchema = z.object({
-  name:        z.string().min(1, "Name is required"),
-  email:       z.string().email("Valid email required"),
-  projectId:   z.string().min(1, "Please select a project"),
-  subject:     z.string().min(1, "Subject is required"),
-  description: z.string().min(10, "Description must be at least 10 characters"),
+  name:      z.string().min(1, "Name is required"),
+  email:     z.string().email("Valid email required"),
+  projectId: z.string().min(1, "Please select a project"),
+  subject:   z.string().min(1, "Subject is required"),
 });
 
 type SubmitFormData = z.infer<typeof submitSchema>;
@@ -49,7 +49,9 @@ export default function PortalSubmit() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { data: session, isPending: sessionPending } = useSession();
-  const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
+  const [descriptions, setDescriptions] = useState<string[]>([""]);
+  const [descErrors,   setDescErrors]   = useState<string[]>([""]);
+  const [attachmentFiles, setAttachmentFiles] = useState<File[][]>([[]]);
   const [captchaVerified, setCaptchaVerified] = useState(false);
   const [captchaToken, setCaptchaToken]       = useState<string | undefined>();
   const [captchaAnswer, setCaptchaAnswer]     = useState<string>("");
@@ -148,14 +150,16 @@ export default function PortalSubmit() {
       fd.append("name",        data.name);
       fd.append("email",       data.email);
       fd.append("subject",     data.subject);
-      fd.append("body",        data.description);
+      fd.append("body",        descriptions.join("\n\n---\n\n"));
       fd.append("projectId",   data.projectId);
       fd.append("projectName",  selectedProject?.projectName ?? "");
       fd.append("captchaToken",  captchaToken  ?? "");
       fd.append("captchaAnswer", captchaAnswer ?? "");
-      for (const file of attachmentFiles) {
-        fd.append("attachments", file);
-      }
+      attachmentFiles.forEach((files, i) => {
+        for (const file of files) {
+          fd.append("attachments", new File([file], `d${i}_${file.name}`, { type: file.type }));
+        }
+      });
       const res = await axios.post<SubmitTicketResponse>(
         `/api/portal/${slug}/tickets`,
         fd
@@ -163,7 +167,9 @@ export default function PortalSubmit() {
       return res.data;
     },
     onSuccess: (data, variables) => {
-      setAttachmentFiles([]);
+      setDescriptions([""]);
+      setDescErrors([""]);
+      setAttachmentFiles([[]]);
       setCaptchaVerified(false);
       setCaptchaToken(undefined);
       setCaptchaAnswer("");
@@ -188,7 +194,33 @@ export default function PortalSubmit() {
     },
   });
 
+  function addDescription() {
+    setDescriptions((d) => [...d, ""]);
+    setDescErrors((e) => [...e, ""]);
+    setAttachmentFiles((f) => [...f, []]);
+  }
+
+  function removeDescription(idx: number) {
+    setDescriptions((d) => d.filter((_, i) => i !== idx));
+    setDescErrors((e) => e.filter((_, i) => i !== idx));
+    setAttachmentFiles((f) => f.filter((_, i) => i !== idx));
+  }
+
+  function updateDescription(idx: number, value: string) {
+    setDescriptions((d) => d.map((v, i) => (i === idx ? value : v)));
+    setDescErrors((e) => e.map((v, i) => (i === idx ? "" : v)));
+  }
+
+  function updateAttachments(idx: number, files: File[]) {
+    setAttachmentFiles((f) => f.map((v, i) => (i === idx ? files : v)));
+  }
+
   const onSubmit = (data: SubmitFormData) => {
+    const errs = descriptions.map((d) =>
+      d.trim().length < 10 ? "Description must be at least 10 characters" : ""
+    );
+    setDescErrors(errs);
+    if (errs.some(Boolean)) return;
     mutation.mutate(data);
   };
 
@@ -347,25 +379,56 @@ export default function PortalSubmit() {
                   )}
                 </div>
 
-                {/* Description */}
-                <div className="space-y-1.5">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    placeholder="Describe the issue in detail (minimum 10 characters)"
-                    rows={5}
-                    {...register("description")}
-                    className={errors.description ? "border-red-400" : ""}
-                  />
-                  {errors.description && (
-                    <p className="text-red-500 text-xs">
-                      {errors.description.message}
-                    </p>
-                  )}
+                {/* Descriptions — one or more, each with its own image uploader */}
+                <div className="space-y-3">
+                  <Label>Description</Label>
+                  {descriptions.map((desc, idx) => (
+                    <div key={idx} className="space-y-1.5">
+                      {descriptions.length > 1 && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium" style={{ color: "var(--rt-text-3)" }}>
+                            Description {idx + 1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removeDescription(idx)}
+                            className="flex items-center gap-0.5 text-xs text-red-500 hover:text-red-700"
+                          >
+                            <X className="h-3 w-3" />
+                            Remove
+                          </button>
+                        </div>
+                      )}
+                      <Textarea
+                        placeholder={
+                          idx === 0
+                            ? "Describe the issue in detail (minimum 10 characters)"
+                            : "Additional description…"
+                        }
+                        rows={5}
+                        value={desc}
+                        onChange={(e) => updateDescription(idx, e.target.value)}
+                        className={descErrors[idx] ? "border-red-400" : ""}
+                      />
+                      {descErrors[idx] && (
+                        <p className="text-red-500 text-xs">{descErrors[idx]}</p>
+                      )}
+                      <ImageUploadField
+                        files={attachmentFiles[idx] ?? []}
+                        onChange={(files) => updateAttachments(idx, files)}
+                      />
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={addDescription}
+                    className="flex items-center gap-1.5 text-sm font-medium"
+                    style={{ color: "var(--rt-accent)" }}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Description
+                  </button>
                 </div>
-
-                {/* Attachments */}
-                <ImageUploadField files={attachmentFiles} onChange={setAttachmentFiles} />
 
                 {/* Simple CAPTCHA */}
                 <SimpleCaptcha

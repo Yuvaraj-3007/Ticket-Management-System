@@ -130,7 +130,7 @@ export default function Clients() {
                   Client Name
                 </TableHead>
                 <TableHead className="font-bold text-xs uppercase tracking-wide" style={{ color: "var(--rt-text-1)" }}>
-                  Portal URL
+                  Customer Portal URL
                 </TableHead>
                 <TableHead className="font-bold text-xs uppercase tracking-wide text-right" style={{ color: "var(--rt-text-1)" }}>
                   Actions

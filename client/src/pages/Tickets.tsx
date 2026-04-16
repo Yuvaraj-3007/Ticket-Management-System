@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import axios from "axios";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -14,6 +14,7 @@ import {
   type ApiTicket,
   TICKET_TYPES,
   PRIORITIES,
+  STATUSES,
   type TicketTypeValue,
   type PriorityValue,
   type StatusValue,
@@ -23,6 +24,8 @@ import {
   PRIORITY_LABELS,
   STATUS_LABELS,
 } from "@/lib/ticket-badges";
+import { STATUS_CONFIG } from "@/lib/status-config";
+import { TicketSlidePanel } from "@/components/TicketSlidePanel";
 import {
   Select,
   SelectContent,
@@ -31,11 +34,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ChevronUp,
   ChevronDown,
   ChevronsUpDown,
+  Eye,
   X,
   Search,
 } from "lucide-react";
@@ -43,16 +47,6 @@ import {
 const API_URL = import.meta.env.VITE_API_URL || "";
 
 // ── Semantic design tokens (intentional fixed colors) ─────────────────────────
-
-// CSS variables handle light/dark automatically — defined in index.css
-const STATUS_CONFIG: Record<string, { dot: string; text: string; bg: string }> = {
-  UN_ASSIGNED:      { dot: "var(--status-un-assigned-dot)",       text: "var(--status-un-assigned-text)",       bg: "var(--status-un-assigned-bg)"       },
-  OPEN_NOT_STARTED: { dot: "var(--status-open-not-started-dot)",  text: "var(--status-open-not-started-text)",  bg: "var(--status-open-not-started-bg)"  },
-  OPEN_IN_PROGRESS: { dot: "var(--status-open-in-progress-dot)",  text: "var(--status-open-in-progress-text)",  bg: "var(--status-open-in-progress-bg)"  },
-  OPEN_QA:          { dot: "var(--status-open-qa-dot)",           text: "var(--status-open-qa-text)",           bg: "var(--status-open-qa-bg)"           },
-  OPEN_DONE:        { dot: "var(--status-open-done-dot)",         text: "var(--status-open-done-text)",         bg: "var(--status-open-done-bg)"         },
-  CLOSED:           { dot: "var(--status-closed-dot)",            text: "var(--status-closed-text)",            bg: "var(--status-closed-bg)"            },
-};
 
 const PRIORITY_CONFIG: Record<string, { bar: string; textDark: string; textLight: string }> = {
   CRITICAL: { bar: "#EF4444", textDark: "#FCA5A5", textLight: "#B91C1C" },
@@ -83,6 +77,7 @@ const columns = [
         to={`/tickets/${info.row.original.id}`}
         className="font-mono text-xs font-semibold"
         style={{ color: "var(--rt-accent)", textDecoration: "none" }}
+        onClick={(e) => e.stopPropagation()}
       >
         {info.getValue()}
       </Link>
@@ -98,6 +93,7 @@ const columns = [
           to={`/tickets/${row.ticketId}`}
           className="text-sm font-medium line-clamp-1 transition-colors duration-150"
           style={{ color: "var(--rt-text-1)", textDecoration: "none" }}
+          onClick={(e) => e.stopPropagation()}
           onMouseEnter={(e) => ((e.currentTarget as HTMLAnchorElement).style.color = "var(--rt-accent)")}
           onMouseLeave={(e)  => ((e.currentTarget as HTMLAnchorElement).style.color = "var(--rt-text-1)")}
         >
@@ -229,6 +225,31 @@ function Tickets() {
   const [clientFilter,  setClientFilter]   = useState(searchParams.get("clientId") ?? "");
   const [dateFrom, setDateFrom]             = useState("");
   const [dateTo, setDateTo]                 = useState("");
+  const [selectedTicket, setSelectedTicket] = useState<ApiTicket | null>(null);
+  const closePanel = useCallback(() => setSelectedTicket(null), []);
+  const navigate = useNavigate();
+
+  const allColumns = useMemo(
+    () => [
+      ...columns,
+      col.display({
+        id: "actions",
+        header: "Action",
+        enableSorting: false,
+        cell: (info) => (
+          <button
+            onClick={(e) => { e.stopPropagation(); setSelectedTicket(info.row.original); }}
+            className="p-1 rounded-md opacity-30 hover:opacity-100 transition-opacity"
+            style={{ color: "var(--rt-text-2)" }}
+            title="Quick view"
+          >
+            <Eye className="h-4 w-4" />
+          </button>
+        ),
+      }),
+    ],
+    [setSelectedTicket]
+  );
 
   useEffect(() => {
     const t = setTimeout(() => setSearch(searchInput.trim()), 300);
@@ -297,7 +318,7 @@ function Tickets() {
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: tickets,
-    columns,
+    columns: allColumns,
     state: { sorting, pagination },
     onSortingChange: (upd) => {
       setSorting(upd);
@@ -311,6 +332,7 @@ function Tickets() {
   });
 
   return (
+    <>
     <div className="px-4 sm:px-6 py-4 sm:py-8">
 
         {/* ── Page header ── */}
@@ -376,13 +398,10 @@ function Tickets() {
               <SelectValue placeholder="All statuses" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all"              className="text-xs">All statuses</SelectItem>
-              <SelectItem value="UN_ASSIGNED"      className="text-xs">{STATUS_LABELS["UN_ASSIGNED"]}</SelectItem>
-              <SelectItem value="OPEN_NOT_STARTED" className="text-xs">{STATUS_LABELS["OPEN_NOT_STARTED"]}</SelectItem>
-              <SelectItem value="OPEN_IN_PROGRESS" className="text-xs">{STATUS_LABELS["OPEN_IN_PROGRESS"]}</SelectItem>
-              <SelectItem value="OPEN_QA"          className="text-xs">{STATUS_LABELS["OPEN_QA"]}</SelectItem>
-              <SelectItem value="OPEN_DONE"        className="text-xs">{STATUS_LABELS["OPEN_DONE"]}</SelectItem>
-              <SelectItem value="CLOSED"           className="text-xs">{STATUS_LABELS["CLOSED"]}</SelectItem>
+              <SelectItem value="all" className="text-xs">All statuses</SelectItem>
+              {STATUSES.map((s) => (
+                <SelectItem key={s} value={s} className="text-xs">{STATUS_LABELS[s]}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
 
@@ -675,7 +694,7 @@ function Tickets() {
               <tbody>
                 {isLoading ? (
                   Array.from({ length: 8 }).map((_, i) => (
-                    <SkeletonRow key={i} colCount={columns.length} />
+                    <SkeletonRow key={i} colCount={columns.length + 1} />
                   ))
                 ) : table.getRowModel().rows.length === 0 ? (
                   <tr>
@@ -707,7 +726,8 @@ function Tickets() {
                     return (
                       <tr
                         key={row.id}
-                        style={{ borderBottom: "1px solid var(--rt-border)", transition: "background 0.1s" }}
+                        style={{ borderBottom: "1px solid var(--rt-border)", transition: "background 0.1s", cursor: "pointer" }}
+                        onClick={() => navigate(`/tickets/${row.original.ticketId}`)}
                         onMouseEnter={(e) =>
                           ((e.currentTarget as HTMLElement).style.background = "var(--rt-surface-2)")
                         }
@@ -758,6 +778,9 @@ function Tickets() {
           </div>
         )}
     </div>
+
+    <TicketSlidePanel ticket={selectedTicket} onClose={closePanel} />
+    </>
   );
 }
 

@@ -30,9 +30,13 @@ const signInSchema = z.object({
 });
 
 const signUpSchema = z.object({
-  name:     z.string().min(1, "Name is required").max(128),
-  email:    z.string().email("Valid email required"),
-  password: z.string().min(8, "At least 8 characters").max(128),
+  name:            z.string().min(1, "Name is required").max(128),
+  email:           z.string().email("Valid email required"),
+  password:        z.string().min(8, "At least 8 characters").max(128),
+  confirmPassword: z.string().min(1, "Please confirm your password"),
+}).refine((d) => d.password === d.confirmPassword, {
+  message: "Passwords do not match",
+  path:    ["confirmPassword"],
 });
 
 type SignInFormData = z.infer<typeof signInSchema>;
@@ -147,6 +151,7 @@ function SignUpForm({ defaultName = "", defaultEmail = "", clientId = "" }: { de
   const navigate = useNavigate();
   const [serverError, setServerError] = useState("");
   const [showPw, setShowPw] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
 
   const {
     register,
@@ -232,7 +237,7 @@ function SignUpForm({ defaultName = "", defaultEmail = "", clientId = "" }: { de
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="signup-password">Password</Label>
+        <Label htmlFor="signup-password">New Password</Label>
         <div className="relative">
           <Input
             id="signup-password"
@@ -252,6 +257,30 @@ function SignUpForm({ defaultName = "", defaultEmail = "", clientId = "" }: { de
         </div>
         {errors.password && (
           <p className="text-red-500 text-xs">{errors.password.message}</p>
+        )}
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="signup-confirm-password">Confirm Password</Label>
+        <div className="relative">
+          <Input
+            id="signup-confirm-password"
+            type={showConfirmPw ? "text" : "password"}
+            placeholder="Re-enter your password"
+            {...register("confirmPassword")}
+            className={errors.confirmPassword ? "border-red-400 pr-10" : "pr-10"}
+          />
+          <button
+            type="button"
+            onClick={() => setShowConfirmPw((v) => !v)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            tabIndex={-1}
+          >
+            {showConfirmPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        </div>
+        {errors.confirmPassword && (
+          <p className="text-red-500 text-xs">{errors.confirmPassword.message}</p>
         )}
       </div>
 

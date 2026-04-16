@@ -4,9 +4,9 @@ import { z } from "zod";
 // Constants
 // ──────────────────────────────────────
 
-export const TICKET_TYPES = ["BUG", "REQUIREMENT", "TASK", "SUPPORT"] as const;
+export const TICKET_TYPES = ["BUG", "REQUIREMENT", "TASK", "SUPPORT", "EXPLANATION"] as const;
 export const PRIORITIES   = ["LOW", "MEDIUM", "HIGH", "CRITICAL"] as const;
-export const STATUSES     = ["UN_ASSIGNED", "OPEN_NOT_STARTED", "OPEN_IN_PROGRESS", "OPEN_QA", "OPEN_DONE", "CLOSED"] as const;
+export const STATUSES     = ["UN_ASSIGNED", "OPEN_NOT_STARTED", "OPEN_IN_PROGRESS", "OPEN_QA", "OPEN_DONE", "WAITING_FOR_CLIENT", "CLOSED"] as const;
 
 export type TicketTypeValue = (typeof TICKET_TYPES)[number];
 export type PriorityValue   = (typeof PRIORITIES)[number];
@@ -18,6 +18,7 @@ export const TICKET_TYPE = {
   REQUIREMENT: "REQUIREMENT",
   TASK:        "TASK",
   SUPPORT:     "SUPPORT",
+  EXPLANATION: "EXPLANATION",
 } as const satisfies Record<string, TicketTypeValue>;
 
 export const PRIORITY = {
@@ -28,12 +29,13 @@ export const PRIORITY = {
 } as const satisfies Record<string, PriorityValue>;
 
 export const STATUS = {
-  UN_ASSIGNED:      "UN_ASSIGNED",
-  OPEN_NOT_STARTED: "OPEN_NOT_STARTED",
-  OPEN_IN_PROGRESS: "OPEN_IN_PROGRESS",
-  OPEN_QA:          "OPEN_QA",
-  OPEN_DONE:        "OPEN_DONE",
-  CLOSED:           "CLOSED",
+  UN_ASSIGNED:        "UN_ASSIGNED",
+  OPEN_NOT_STARTED:   "OPEN_NOT_STARTED",
+  OPEN_IN_PROGRESS:   "OPEN_IN_PROGRESS",
+  OPEN_QA:            "OPEN_QA",
+  OPEN_DONE:          "OPEN_DONE",
+  WAITING_FOR_CLIENT: "WAITING_FOR_CLIENT",
+  CLOSED:             "CLOSED",
 } as const satisfies Record<string, StatusValue>;
 
 // ──────────────────────────────────────

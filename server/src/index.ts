@@ -27,6 +27,18 @@ import { processImapEmail } from "./routes/webhooks.js";
 
 dotenv.config();
 
+// Fail fast if the auth secret is missing — without it Better Auth generates a
+// random secret each restart, invalidating every user session on restart.
+if (!process.env.BETTER_AUTH_SECRET) {
+  console.error(
+    "[FATAL] BETTER_AUTH_SECRET is not set. All user sessions will be invalidated on every restart. " +
+    "Set a stable random string (e.g. openssl rand -base64 32) in your .env file."
+  );
+  if (process.env.NODE_ENV === "production") {
+    process.exit(1);
+  }
+}
+
 Sentry.init({
   dsn: process.env.SENTRY_DSN,
   enabled: !!process.env.SENTRY_DSN,
@@ -116,7 +128,7 @@ app.use("/uploads", (_req, res, next) => {
   res.setHeader("Content-Disposition", "attachment");
   res.setHeader("X-Content-Type-Options", "nosniff");
   next();
-}, express.static(path.resolve(__dirname, "../../uploads")));
+}, express.static(path.resolve(__dirname, "../uploads")));
 
 // General API rate limit — applied in all environments (stricter in production)
 const isProd = process.env.NODE_ENV === "production";

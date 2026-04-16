@@ -91,6 +91,7 @@ enum TicketType {
   REQUIREMENT
   TASK
   SUPPORT
+  EXPLANATION
 }
 
 enum Priority {
@@ -106,6 +107,7 @@ enum Status {
   OPEN_IN_PROGRESS
   OPEN_QA
   OPEN_DONE
+  WAITING_FOR_CLIENT
   CLOSED
 }
 

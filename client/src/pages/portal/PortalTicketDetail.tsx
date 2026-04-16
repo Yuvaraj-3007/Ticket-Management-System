@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ImageUploadField } from "@/components/portal/ImageUploadField";
+import { statusVariant, STATUS_LABELS } from "@/lib/ticket-badges";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -53,29 +54,8 @@ type PortalComment = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-type BadgeVariant = "default" | "secondary" | "outline" | "destructive";
-
-function statusVariant(status: string): BadgeVariant {
-  switch (status) {
-    case "OPEN_IN_PROGRESS":
-    case "OPEN_QA":          return "default";
-    case "OPEN_NOT_STARTED": return "secondary";
-    case "OPEN_DONE":        return "outline";
-    case "CLOSED":           return "outline";
-    default:                 return "secondary";
-  }
-}
-
 function statusLabel(status: string): string {
-  switch (status) {
-    case "UN_ASSIGNED":      return "Un-Assigned";
-    case "OPEN_NOT_STARTED": return "Not Started";
-    case "OPEN_IN_PROGRESS": return "In Progress";
-    case "OPEN_QA":          return "QA";
-    case "OPEN_DONE":        return "Done";
-    case "CLOSED":           return "Closed";
-    default:                 return status;
-  }
+  return STATUS_LABELS[status as keyof typeof STATUS_LABELS] ?? status;
 }
 
 function formatDate(iso: string): string {
@@ -341,7 +321,7 @@ export default function PortalTicketDetail() {
             <div className="flex items-center gap-3 mb-2">
               <span className="font-mono text-sm text-muted-foreground">{ticket.ticketId}</span>
               <div className="flex gap-2">
-                <Badge variant={statusVariant(ticket.status)}>{statusLabel(ticket.status)}</Badge>
+                <Badge variant={statusVariant(ticket.status as Parameters<typeof statusVariant>[0])}>{statusLabel(ticket.status)}</Badge>
               </div>
             </div>
             <h2 className="text-xl sm:text-2xl font-bold">{ticket.title}</h2>
@@ -356,12 +336,9 @@ export default function PortalTicketDetail() {
               {ticket.senderName ?? ticket.senderEmail}
             </DetailRow>
             <DetailRow label="Status">
-              <Badge variant={statusVariant(ticket.status)}>{statusLabel(ticket.status)}</Badge>
+              <Badge variant={statusVariant(ticket.status as Parameters<typeof statusVariant>[0])}>{statusLabel(ticket.status)}</Badge>
             </DetailRow>
-            <DetailRow label="Assigned Employee">
-              {ticket.assignedTo?.name ?? <span className="text-muted-foreground">Unassigned</span>}
-            </DetailRow>
-            <DetailRow label="Created">
+<DetailRow label="Created">
               {formatDate(ticket.createdAt)}
             </DetailRow>
             <DetailRow label="Last updated">

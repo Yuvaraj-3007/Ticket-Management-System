@@ -2,10 +2,11 @@ import multer from "multer";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { mkdirSync } from "node:fs";
+import fs from "node:fs";
 import { randomUUID } from "node:crypto";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const UPLOADS_DIR = path.resolve(__dirname, "../../../uploads");
+const UPLOADS_DIR = path.resolve(__dirname, "../../uploads");
 
 const storage = multer.diskStorage({
   destination(_req, _file, cb) {
@@ -27,6 +28,43 @@ const MIME_TO_EXT: Record<string, Set<string>> = {
   "image/gif":  new Set([".gif"]),
   "image/webp": new Set([".webp"]),
 };
+
+// H-3 — magic byte (file signature) validation
+// Cross-checks the actual file bytes against known image signatures so a
+// polyglot file (e.g. GIF header + HTML payload) cannot slip through the
+// MIME / extension gate above.
+const MAGIC_SIGNATURES: { signature: number[]; mimeType: string }[] = [
+  { signature: [0xFF, 0xD8, 0xFF],             mimeType: "image/jpeg" },  // JPEG / JFIF
+  { signature: [0x89, 0x50, 0x4E, 0x47],       mimeType: "image/png"  },  // PNG
+  { signature: [0x47, 0x49, 0x46, 0x38],       mimeType: "image/gif"  },  // GIF87a / GIF89a
+  { signature: [0x52, 0x49, 0x46, 0x46],       mimeType: "image/webp" },  // WEBP (RIFF container)
+];
+
+/**
+ * Reads the first 12 bytes of a saved file and verifies that they match a
+ * known image magic-byte signature.  Returns `false` for any file that does
+ * not start with a recognised signature, or for WEBP files whose RIFF chunk
+ * sub-type identifier (bytes 8-11) is not "WEBP".
+ */
+export async function validateMagicBytes(filepath: string): Promise<boolean> {
+  const fd = await fs.promises.open(filepath, "r");
+  try {
+    const buffer = Buffer.alloc(12);
+    await fd.read(buffer, 0, 12, 0);
+    for (const { signature, mimeType } of MAGIC_SIGNATURES) {
+      if (signature.every((byte, i) => buffer[i] === byte)) {
+        // WEBP uses a generic RIFF container — confirm the sub-type is WEBP
+        if (mimeType === "image/webp") {
+          return buffer.slice(8, 12).toString("ascii") === "WEBP";
+        }
+        return true;
+      }
+    }
+    return false;
+  } finally {
+    await fd.close();
+  }
+}
 
 export const uploadArray = multer({
   storage,

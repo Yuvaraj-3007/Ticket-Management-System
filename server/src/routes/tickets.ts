@@ -469,12 +469,12 @@ router.patch("/:id/assignee", async (req: Request<{ id: string }>, res: Response
       select: { email: true },
     });
     if (assignedUser) {
-      const baseUrl = process.env.RIGHT_TRACKER_URL ?? "http://localhost:5173";
+      const baseUrl = process.env.RIGHT_TRACKER_URL ?? process.env.BETTER_AUTH_URL ?? "http://localhost:5173";
       void notifyWiseworkAssignment({
         employeeEmail:  assignedUser.email,
-        ticketId:       req.params.id,
+        ticketId:       updated.ticketId,
         ticketTitle:    updated.title,
-        ticketUrl:      `${baseUrl}/tickets/${req.params.id}`,
+        ticketUrl:      `${baseUrl}/tickets/${updated.ticketId}`,
         priority:       updated.priority,
         assignedByName: req.user!.name,
       });

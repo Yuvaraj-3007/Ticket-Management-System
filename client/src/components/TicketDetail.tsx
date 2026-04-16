@@ -34,6 +34,41 @@ import {
 
 const API_URL = import.meta.env.VITE_API_URL || "";
 
+// ─── Attachment helpers ───────────────────────────────────────────────────────
+
+const ATTACHMENT_PREFIX_RE = /^d(\d+)_/;
+
+function AttachmentRow({ attachments }: { attachments: Array<{ id: string; filename: string; mimetype: string; url: string }> }) {
+  if (attachments.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-3 mt-3">
+      {attachments.map((a) => (
+        <a
+          key={a.id}
+          href={a.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex flex-col items-center gap-1 group"
+          title={a.filename}
+        >
+          <div className="w-20 h-20 rounded-md border overflow-hidden bg-muted/30 flex items-center justify-center">
+            {a.mimetype.startsWith("image/") ? (
+              <img
+                src={a.url}
+                alt={a.filename}
+                className="w-full h-full object-cover group-hover:opacity-80 transition-opacity"
+              />
+            ) : (
+              <span className="text-xs text-muted-foreground text-center px-1 break-all">{a.filename}</span>
+            )}
+          </div>
+          <span className="text-xs text-muted-foreground max-w-[80px] truncate">{a.filename.replace(ATTACHMENT_PREFIX_RE, "")}</span>
+        </a>
+      ))}
+    </div>
+  );
+}
+
 // ─── Detail row helper ────────────────────────────────────────────────────────
 
 function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
@@ -252,7 +287,55 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
           </Button>
         </div>
         <div className="border rounded-lg p-4 bg-muted/20">
-          <pre className="text-sm whitespace-pre-wrap font-sans leading-relaxed">{ticket.description}</pre>
+          {(() => {
+            const sections = ticket.description.split("\n\n---\n\n");
+            const generalAttachments = ticket.attachments.filter((a) => !ATTACHMENT_PREFIX_RE.test(a.filename));
+
+            if (sections.length === 1) {
+              const sectionAttachments = ticket.attachments.filter((a) => {
+                const m = a.filename.match(ATTACHMENT_PREFIX_RE);
+                return m ? Number(m[1]) === 0 : false;
+              });
+              return (
+                <>
+                  <pre className="text-sm whitespace-pre-wrap font-sans leading-relaxed">{ticket.description}</pre>
+                  <AttachmentRow attachments={[...sectionAttachments, ...generalAttachments]} />
+                </>
+              );
+            }
+
+            return (
+              <div className="space-y-4">
+                {sections.map((section, idx) => {
+                  const sectionAttachments = ticket.attachments.filter((a) => {
+                    const m = a.filename.match(ATTACHMENT_PREFIX_RE);
+                    return m ? Number(m[1]) === idx : false;
+                  });
+                  return (
+                    <div key={idx}>
+                      {idx > 0 && (
+                        <>
+                          <hr className="mb-3" style={{ borderColor: "var(--rt-border)" }} />
+                          <p className="text-xs font-semibold uppercase tracking-wide mb-2 text-muted-foreground">
+                            Description {idx + 1}
+                          </p>
+                        </>
+                      )}
+                      <pre className="text-sm whitespace-pre-wrap font-sans leading-relaxed">{section}</pre>
+                      <AttachmentRow attachments={sectionAttachments} />
+                    </div>
+                  );
+                })}
+                {generalAttachments.length > 0 && (
+                  <div>
+                    <hr className="mb-3" style={{ borderColor: "var(--rt-border)" }} />
+                    <p className="text-xs font-semibold uppercase tracking-wide mb-2 text-muted-foreground">Attachments</p>
+                    <AttachmentRow attachments={generalAttachments} />
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
         {summarizeMutation.isError && (
           <p className="text-xs text-destructive mt-2">Failed to summarize. Please try again.</p>
