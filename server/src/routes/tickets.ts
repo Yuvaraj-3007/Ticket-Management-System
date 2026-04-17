@@ -627,7 +627,7 @@ router.post("/:id/comments", async (req: Request<{ id: string }>, res: Response)
 
   const ticket = await prisma.ticket.findUnique({
     where:  { ticketId: req.params.id },
-    select: { id: true, title: true, senderEmail: true },
+    select: { id: true, title: true, senderEmail: true, hrmsClientName: true },
   });
   if (!ticket) {
     res.status(404).json({ error: "Ticket not found" });
@@ -685,7 +685,10 @@ router.post("/:id/comments", async (req: Request<{ id: string }>, res: Response)
   };
   res.status(201).json(response);
 
-  if (isAgentOrAdmin && ticket.senderEmail) {
+  // Only email for tickets that originated via email webhook (hrmsClientName is null).
+  // Portal tickets always set hrmsClientName; webhook tickets never do.
+  // Portal customers can log in to see replies, so no email is needed there.
+  if (isAgentOrAdmin && ticket.senderEmail && !ticket.hrmsClientName) {
     sendReplyEmail({
       to:             ticket.senderEmail,
       ticketId:       req.params.id,
