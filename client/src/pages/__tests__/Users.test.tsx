@@ -8,6 +8,9 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import Users from "../Users";
 import { ROLES } from "@tms/core";
 
+// Use delay:null globally to avoid keystroke delays causing test timeouts
+const user = userEvent.setup({ delay: null });
+
 vi.mock("axios");
 vi.mock("@/components/Navbar", () => ({ default: () => <div>Navbar</div> }));
 vi.mock("@/lib/auth-client", () => ({
@@ -39,7 +42,7 @@ async function openAddUserDialog() {
   mockedAxios.get = vi.fn().mockResolvedValue({ data: [] });
   renderUsers();
   await waitFor(() => screen.getByRole("button", { name: /add user/i }));
-  await userEvent.click(screen.getByRole("button", { name: /add user/i }));
+  await user.click(screen.getByRole("button", { name: /add user/i }));
   await waitFor(() => screen.getByRole("dialog"));
 }
 
@@ -123,7 +126,7 @@ describe("Create user form", () => {
 
   it("shows validation errors for empty name and email", async () => {
     await openAddUserDialog();
-    await userEvent.click(screen.getByRole("button", { name: /create user/i }));
+    await user.click(screen.getByRole("button", { name: /create user/i }));
     await waitFor(() => {
       expect(screen.getByText(/name is required/i)).toBeInTheDocument();
       expect(screen.getByText(/email is required/i)).toBeInTheDocument();
@@ -132,10 +135,10 @@ describe("Create user form", () => {
 
   it("shows password required error when name and email are valid but password is blank", async () => {
     await openAddUserDialog();
-    await userEvent.type(screen.getByLabelText(/^name/i), "Test User");
-    await userEvent.type(screen.getByLabelText(/email/i), "test@example.com");
+    await user.type(screen.getByLabelText(/^name/i), "Test User");
+    await user.type(screen.getByLabelText(/email/i), "test@example.com");
     // password left blank
-    await userEvent.click(screen.getByRole("button", { name: /create user/i }));
+    await user.click(screen.getByRole("button", { name: /create user/i }));
     await waitFor(() => {
       expect(screen.getByText(/password is required/i)).toBeInTheDocument();
     });
@@ -143,10 +146,10 @@ describe("Create user form", () => {
 
   it("shows validation error for invalid email", async () => {
     await openAddUserDialog();
-    await userEvent.type(screen.getByLabelText(/^name/i), "Test User");
-    await userEvent.type(screen.getByLabelText(/email/i), "not-an-email");
-    await userEvent.type(screen.getByLabelText(/password/i), "password123");
-    await userEvent.click(screen.getByRole("button", { name: /create user/i }));
+    await user.type(screen.getByLabelText(/^name/i), "Test User");
+    await user.type(screen.getByLabelText(/email/i), "not-an-email");
+    await user.type(screen.getByLabelText(/password/i), "password123");
+    await user.click(screen.getByRole("button", { name: /create user/i }));
     await waitFor(() => {
       expect(screen.getByText(/enter a valid email/i)).toBeInTheDocument();
     });
@@ -154,10 +157,10 @@ describe("Create user form", () => {
 
   it("shows validation error for short password", async () => {
     await openAddUserDialog();
-    await userEvent.type(screen.getByLabelText(/^name/i), "Test User");
-    await userEvent.type(screen.getByLabelText(/email/i), "test@example.com");
-    await userEvent.type(screen.getByLabelText(/password/i), "short");
-    await userEvent.click(screen.getByRole("button", { name: /create user/i }));
+    await user.type(screen.getByLabelText(/^name/i), "Test User");
+    await user.type(screen.getByLabelText(/email/i), "test@example.com");
+    await user.type(screen.getByLabelText(/password/i), "short");
+    await user.click(screen.getByRole("button", { name: /create user/i }));
     await waitFor(() => {
       expect(screen.getByText(/at least 8 characters/i)).toBeInTheDocument();
     });
@@ -178,13 +181,13 @@ describe("Create user form", () => {
 
     renderUsers();
     await waitFor(() => screen.getByRole("button", { name: /add user/i }));
-    await userEvent.click(screen.getByRole("button", { name: /add user/i }));
+    await user.click(screen.getByRole("button", { name: /add user/i }));
     await waitFor(() => screen.getByRole("dialog"));
 
-    await userEvent.type(screen.getByLabelText(/^name/i), "New User");
-    await userEvent.type(screen.getByLabelText(/email/i), "new@example.com");
-    await userEvent.type(screen.getByLabelText(/password/i), "password123");
-    await userEvent.click(screen.getByRole("button", { name: /create user/i }));
+    await user.type(screen.getByLabelText(/^name/i), "New User");
+    await user.type(screen.getByLabelText(/email/i), "new@example.com");
+    await user.type(screen.getByLabelText(/password/i), "password123");
+    await user.click(screen.getByRole("button", { name: /create user/i }));
 
     await waitFor(() => {
       expect(mockedAxios.post).toHaveBeenCalledWith(
@@ -202,10 +205,10 @@ describe("Create user form", () => {
     });
     await openAddUserDialog();
 
-    await userEvent.type(screen.getByLabelText(/^name/i), "Test User");
-    await userEvent.type(screen.getByLabelText(/email/i), "test@example.com");
-    await userEvent.type(screen.getByLabelText(/password/i), "password123");
-    await userEvent.click(screen.getByRole("button", { name: /create user/i }));
+    await user.type(screen.getByLabelText(/^name/i), "Test User");
+    await user.type(screen.getByLabelText(/email/i), "test@example.com");
+    await user.type(screen.getByLabelText(/password/i), "password123");
+    await user.click(screen.getByRole("button", { name: /create user/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/failed to create user/i)).toBeInTheDocument();
@@ -218,10 +221,10 @@ describe("Create user form", () => {
     });
     await openAddUserDialog();
 
-    await userEvent.type(screen.getByLabelText(/^name/i), "Test User");
-    await userEvent.type(screen.getByLabelText(/email/i), "dupe@example.com");
-    await userEvent.type(screen.getByLabelText(/password/i), "password123");
-    await userEvent.click(screen.getByRole("button", { name: /create user/i }));
+    await user.type(screen.getByLabelText(/^name/i), "Test User");
+    await user.type(screen.getByLabelText(/email/i), "dupe@example.com");
+    await user.type(screen.getByLabelText(/password/i), "password123");
+    await user.click(screen.getByRole("button", { name: /create user/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/email already exists/i)).toBeInTheDocument();
@@ -230,7 +233,7 @@ describe("Create user form", () => {
 
   it("closes the dialog when Cancel is clicked", async () => {
     await openAddUserDialog();
-    await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
+    await user.click(screen.getByRole("button", { name: /cancel/i }));
     await waitFor(() => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     });

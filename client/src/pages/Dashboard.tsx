@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -47,6 +48,13 @@ interface ClientRecentTicket {
 interface StatusBreakdown { status: string; count: number; }
 interface PriorityBreakdown { priority: string; count: number; }
 
+interface ClientBreakdown {
+  clientId:        string;
+  clientName:      string;
+  total:           number;
+  newRequirements: number;
+}
+
 interface DashboardStats {
   total:              number;
   open:               number;
@@ -63,6 +71,8 @@ interface DashboardStats {
   clientRecentTickets: ClientRecentTicket[];
   statusBreakdown:    StatusBreakdown[];
   priorityBreakdown:  PriorityBreakdown[];
+  newRequirementsTotal: number;
+  clientBreakdown:    ClientBreakdown[];
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -164,7 +174,7 @@ function KpiCard({ label, value, sub, icon, accent = "blue" }: KpiCardProps) {
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">{label}</p>
-            <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">{value}</p>
+            <p className="text-3xl font-bold text-foreground">{value}</p>
             {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
           </div>
           <div className={`flex-shrink-0 ml-3 p-2.5 rounded-lg ${ACCENT_BG[accent]}`}>
@@ -185,7 +195,7 @@ function StarRating({ rating, size = "sm" }: { rating: number; size?: "sm" | "lg
       {Array.from({ length: 5 }).map((_, i) => (
         <svg
           key={i}
-          className={`${sz} ${i < Math.round(rating) ? "text-amber-400" : "text-gray-200"}`}
+          className={`${sz} ${i < Math.round(rating) ? "text-amber-400" : "text-muted-foreground/30"}`}
           fill="currentColor"
           viewBox="0 0 20 20"
         >
@@ -198,11 +208,28 @@ function StarRating({ rating, size = "sm" }: { rating: number; size?: "sm" | "lg
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
+/** Build "All time" + last 12 calendar months as YYYY-MM picker options. */
+function buildMonthOptions(): { value: string; label: string }[] {
+  const opts: { value: string; label: string }[] = [{ value: "", label: "All time" }];
+  const now = new Date();
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+    const value = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+    const label = d.toLocaleDateString(undefined, { year: "numeric", month: "long" });
+    opts.push({ value, label });
+  }
+  return opts;
+}
+
 function Dashboard() {
+  const [month, setMonth] = useState<string>("");
+  const monthOptions = buildMonthOptions();
+
   const { data: stats, isLoading, isError } = useQuery<DashboardStats>({
-    queryKey: ["dashboard-stats"],
+    queryKey: ["dashboard-stats", month],
     queryFn: async () => {
-      const res = await fetch("/api/tickets/stats", { credentials: "include" });
+      const url = month ? `/api/tickets/stats?month=${month}` : "/api/tickets/stats";
+      const res = await fetch(url, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch stats");
       return res.json();
     },
@@ -212,13 +239,31 @@ function Dashboard() {
   return (
     <div className="px-4 sm:px-6 py-6 sm:py-8 max-w-7xl mx-auto">
       {/* Page header */}
-      <div className="mb-7">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ color: "var(--rt-text-1)" }}>
-          Dashboard
-        </h1>
-        <p className="mt-1 text-sm" style={{ color: "var(--rt-text-3)" }}>
-          Support queue overview — today's snapshot and trends
-        </p>
+      <div className="mb-7 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ color: "var(--rt-text-1)" }}>
+            Dashboard
+          </h1>
+          <p className="mt-1 text-sm" style={{ color: "var(--rt-text-3)" }}>
+            Support queue overview — today's snapshot and trends
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <label htmlFor="month-filter" className="text-xs font-medium" style={{ color: "var(--rt-text-3)" }}>
+            Month:
+          </label>
+          <select
+            id="month-filter"
+            value={month}
+            onChange={(e) => setMonth(e.target.value)}
+            className="h-8 text-xs rounded-md px-2 border bg-background"
+            style={{ borderColor: "var(--rt-border)" }}
+          >
+            {monthOptions.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {isError && (
@@ -254,6 +299,13 @@ function Dashboard() {
             sub="needs attention"
             icon={<AlertTriangle className="h-5 w-5" />}
             accent="amber"
+          />
+          <KpiCard
+            label="New Requirements"
+            value={stats.newRequirementsTotal}
+            sub="implementation tickets"
+            icon={<CircleDot className="h-5 w-5" />}
+            accent="violet"
           />
           <KpiCard
             label="Created Today"
@@ -293,29 +345,68 @@ function Dashboard() {
                 data={stats?.dailyCounts ?? []}
                 margin={{ top: 4, right: 8, left: -16, bottom: 0 }}
               >
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--rt-border)" />
                 <XAxis
                   dataKey="date"
                   tickFormatter={formatChartDate}
-                  tick={{ fontSize: 11, fill: "#6b7280" }}
+                  tick={{ fontSize: 11, fill: "var(--rt-text-3)" }}
                   tickLine={false}
                   axisLine={false}
                   interval={4}
                 />
                 <YAxis
                   allowDecimals={false}
-                  tick={{ fontSize: 11, fill: "#6b7280" }}
+                  tick={{ fontSize: 11, fill: "var(--rt-text-3)" }}
                   tickLine={false}
                   axisLine={false}
                 />
                 <Tooltip
                   formatter={(value) => [Number(value), "Tickets"]}
                   labelFormatter={(label) => formatChartDate(String(label))}
-                  cursor={{ fill: "#f3f4f6" }}
+                  cursor={{ fill: "var(--rt-surface-2)" }}
                 />
                 <Bar dataKey="count" fill="#3b82f6" radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Per-client breakdown: total tickets vs new requirements ── */}
+      <Card className="mb-6">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold">Tickets by Client</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {isLoading ? (
+            <div className="p-6 space-y-3">
+              {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+            </div>
+          ) : !stats?.clientBreakdown?.length ? (
+            <p className="px-6 py-4 text-sm text-muted-foreground">No client tickets yet.</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="text-xs uppercase tracking-wide text-muted-foreground bg-muted/40">
+                <tr>
+                  <th className="text-left px-4 py-2 font-medium">Client</th>
+                  <th className="text-right px-4 py-2 font-medium">Total tickets</th>
+                  <th className="text-right px-4 py-2 font-medium">New requirements</th>
+                  <th className="text-right px-4 py-2 font-medium">Bugs &amp; support</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {stats.clientBreakdown.map((c) => (
+                  <tr key={c.clientId} className="hover:bg-muted/30">
+                    <td className="px-4 py-2.5 font-medium">{c.clientName}</td>
+                    <td className="px-4 py-2.5 text-right">{c.total}</td>
+                    <td className="px-4 py-2.5 text-right">
+                      <span className="text-indigo-700 font-medium">{c.newRequirements}</span>
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-muted-foreground">{c.total - c.newRequirements}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </CardContent>
       </Card>
@@ -335,18 +426,18 @@ function Dashboard() {
             ) : !stats?.clientRecentTickets?.length ? (
               <p className="px-6 py-4 text-sm text-muted-foreground">No client tickets available.</p>
             ) : (
-              <ul className="divide-y divide-gray-50">
+              <ul className="divide-y divide-border">
                 {stats.clientRecentTickets.map((item) => (
-                  <li key={item.ticketId} className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
+                  <li key={item.ticketId} className="flex items-start gap-3 px-4 py-3 hover:bg-muted transition-colors">
                     <span className={`mt-1.5 flex-shrink-0 w-2 h-2 rounded-full ${STATUS_DOT[item.status] ?? "bg-gray-400"}`} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-mono text-xs text-muted-foreground">{item.ticketId}</span>
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
                           {STATUS_LABELS[item.status] ?? item.status}
                         </span>
                       </div>
-                      <p className="text-sm text-gray-900 mt-0.5 truncate">{item.title}</p>
+                      <p className="text-sm text-foreground mt-0.5 truncate">{item.title}</p>
                       <p className="text-xs text-muted-foreground mt-0.5 font-medium" style={{ color: "var(--rt-accent)" }}>
                         {item.clientName}
                       </p>
@@ -414,9 +505,9 @@ function Dashboard() {
                     layout="vertical"
                     margin={{ top: 0, right: 16, left: 8, bottom: 0 }}
                   >
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e5e7eb" />
-                    <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: "#6b7280" }} tickLine={false} axisLine={false} />
-                    <YAxis type="category" dataKey="priority" tickFormatter={(v) => PRIORITY_LABELS_MAP[v] ?? v} tick={{ fontSize: 11, fill: "#6b7280" }} tickLine={false} axisLine={false} width={64} />
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--rt-border)" />
+                    <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: "var(--rt-text-3)" }} tickLine={false} axisLine={false} />
+                    <YAxis type="category" dataKey="priority" tickFormatter={(v) => PRIORITY_LABELS_MAP[v] ?? v} tick={{ fontSize: 11, fill: "var(--rt-text-3)" }} tickLine={false} axisLine={false} width={64} />
                     <Tooltip formatter={(v) => [v, "Tickets"]} labelFormatter={(l) => PRIORITY_LABELS_MAP[l] ?? l} />
                     <Bar dataKey="count" radius={[0, 3, 3, 0]}>
                       {PRIORITY_ORDER.map((p) => (

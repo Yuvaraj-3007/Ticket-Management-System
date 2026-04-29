@@ -31,7 +31,7 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV:           production
-      PORT:               4000
+      PORT:               3000
       DATABASE_URL:       postgresql://tms_user:${POSTGRES_PASSWORD:-tms_password}@db:5432/ticket_management
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       BETTER_AUTH_URL:    ${BETTER_AUTH_URL}
@@ -58,11 +58,11 @@ services:
     volumes:
       - uploads:/app/server/uploads
     ports:
-      - "4000:4000"
+      - "3000:3000"
     networks:
       - tms-net
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:4000/api/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -79,7 +79,7 @@ services:
         condition: service_healthy
     environment:
       # Nginx proxies /api/* and /uploads/* to the backend container
-      BACKEND_URL: http://backend:4000
+      BACKEND_URL: http://backend:3000
     ports:
       - "80:80"
     networks:

@@ -5,9 +5,10 @@ import {
   apiTicketSchema,
   assignableUsersSchema,
   type AssignableUser,
-  STATUSES,
   TICKET_TYPES,
   PRIORITIES,
+  TICKET_TYPE,
+  legalNextStatuses,
   type StatusValue,
   type TicketTypeValue,
   type PriorityValue,
@@ -20,8 +21,9 @@ import {
   PRIORITY_LABELS,
   STATUS_LABELS,
 } from "@/lib/ticket-badges";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Loader2 } from "lucide-react";
 import { EnumSelect } from "@/components/EnumSelect";
+import { ImplementationPanel } from "@/components/ImplementationPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -33,6 +35,41 @@ import {
 } from "@/components/ui/select";
 
 const API_URL = import.meta.env.VITE_API_URL || "";
+
+// ─── Attachment helpers ───────────────────────────────────────────────────────
+
+const ATTACHMENT_PREFIX_RE = /^d(\d+)_/;
+
+function AttachmentRow({ attachments }: { attachments: Array<{ id: string; filename: string; mimetype: string; url: string }> }) {
+  if (attachments.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-3 mt-3">
+      {attachments.map((a) => (
+        <a
+          key={a.id}
+          href={a.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex flex-col items-center gap-1 group"
+          title={a.filename}
+        >
+          <div className="w-20 h-20 rounded-md border overflow-hidden bg-muted/30 flex items-center justify-center">
+            {a.mimetype.startsWith("image/") ? (
+              <img
+                src={a.url}
+                alt={a.filename}
+                className="w-full h-full object-cover group-hover:opacity-80 transition-opacity"
+              />
+            ) : (
+              <span className="text-xs text-muted-foreground text-center px-1 break-all">{a.filename}</span>
+            )}
+          </div>
+          <span className="text-xs text-muted-foreground max-w-[80px] truncate">{a.filename.replace(ATTACHMENT_PREFIX_RE, "")}</span>
+        </a>
+      ))}
+    </div>
+  );
+}
 
 // ─── Detail row helper ────────────────────────────────────────────────────────
 
@@ -129,6 +166,70 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
     },
   });
 
+  const estimatedHoursMutation = useMutation({
+    mutationFn: async (val: number | null) => {
+      const res = await axios.patch(
+        `${API_URL}/api/tickets/${ticketId}/estimated-hours`,
+        { estimatedHours: val },
+        { withCredentials: true },
+      );
+      return res.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["ticket", ticketId] }),
+  });
+
+  const actualHoursMutation = useMutation({
+    mutationFn: async (val: number | null) => {
+      const res = await axios.patch(
+        `${API_URL}/api/tickets/${ticketId}/actual-hours`,
+        { actualHours: val },
+        { withCredentials: true },
+      );
+      return res.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["ticket", ticketId] }),
+  });
+
+  const aiEstimateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await axios.post(
+        `${API_URL}/api/tickets/${ticketId}/estimate-hours-ai`,
+        {},
+        { withCredentials: true },
+      );
+      return res.data as { estimatedHours: number };
+    },
+    onSuccess: (data) => {
+      // Apply the AI suggestion via the regular PATCH mutation so the
+      // estimated-hours field updates and the ticket query is invalidated.
+      estimatedHoursMutation.mutate(data.estimatedHours);
+    },
+  });
+
+  // Hours inputs are uncontrolled — typing only updates the input element;
+  // we read e.target.value on blur and commit via mutation. The `key` prop
+  // (server-confirmed value) re-mounts the input whenever the ticket value
+  // changes externally so the displayed value stays in sync without an
+  // effect that calls setState (which trips react-hooks/set-state-in-effect).
+  const estimatedDefault = ticket?.estimatedHours == null ? "" : String(Number(ticket.estimatedHours));
+  const actualDefault    = ticket?.actualHours    == null ? "" : String(Number(ticket.actualHours));
+
+  function commitHours(
+    raw: string,
+    current: number | null | undefined,
+    mutate: (val: number | null) => void,
+  ) {
+    const trimmed = raw.trim();
+    if (trimmed === "") {
+      if (current != null) mutate(null);
+      return;
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed)) return;
+    if (current != null && Number(current) === parsed) return;
+    mutate(parsed);
+  }
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -175,7 +276,7 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
         <DetailRow label="Status">
           <EnumSelect
             value={ticket.status}
-            options={STATUSES}
+            options={legalNextStatuses(ticket.status, ticket.type) as readonly StatusValue[]}
             labels={STATUS_LABELS}
             onValueChange={(val) => statusMutation.mutate(val)}
             disabled={statusMutation.isPending}
@@ -204,6 +305,95 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
             isError={priorityMutation.isError}
             errorMessage="Failed to update priority"
           />
+        </DetailRow>
+        <DetailRow label="Estimated Hours">
+          <div className="flex items-center gap-2">
+            <input
+              key={`estimated-${estimatedDefault}`}
+              type="number"
+              min="0"
+              max="9999.99"
+              step="0.25"
+              defaultValue={estimatedDefault}
+              onBlur={(e) =>
+                commitHours(
+                  e.currentTarget.value,
+                  ticket.estimatedHours ?? null,
+                  (v) => estimatedHoursMutation.mutate(v),
+                )
+              }
+              disabled={estimatedHoursMutation.isPending || aiEstimateMutation.isPending}
+              placeholder="—"
+              aria-label="Estimated hours"
+              className="h-9 px-3 rounded-md border border-border bg-background text-sm w-[100px] disabled:opacity-50"
+            />
+            <button
+              type="button"
+              onClick={() => aiEstimateMutation.mutate()}
+              disabled={aiEstimateMutation.isPending || estimatedHoursMutation.isPending}
+              title="AI estimate"
+              aria-label="AI estimate"
+              className="inline-flex items-center gap-1 h-9 px-2 rounded-md border border-border bg-secondary text-secondary-foreground text-xs hover:bg-secondary/80 disabled:opacity-50"
+            >
+              {aiEstimateMutation.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5" />
+              )}
+              AI
+            </button>
+            <span className="text-xs text-muted-foreground" data-testid="estimated-hours-display">
+              {ticket.estimatedHours == null ? "—" : `${Number(ticket.estimatedHours)}h`}
+            </span>
+            {estimatedHoursMutation.isPending && !aiEstimateMutation.isPending && (
+              <span className="text-xs text-muted-foreground">Saving…</span>
+            )}
+          </div>
+          {estimatedHoursMutation.isError && (
+            <p className="text-xs text-destructive mt-1">Failed to update estimated hours</p>
+          )}
+          {aiEstimateMutation.isError && (
+            <p className="text-xs text-destructive mt-1">Failed to get AI estimate</p>
+          )}
+        </DetailRow>
+        <DetailRow label="Actual Hours">
+          <div className="flex items-center gap-2">
+            <input
+              key={`actual-${actualDefault}`}
+              type="number"
+              min="0"
+              max="9999.99"
+              step="0.25"
+              defaultValue={actualDefault}
+              onBlur={(e) =>
+                commitHours(
+                  e.currentTarget.value,
+                  ticket.actualHours ?? null,
+                  (v) => actualHoursMutation.mutate(v),
+                )
+              }
+              disabled={actualHoursMutation.isPending}
+              placeholder="—"
+              aria-label="Actual hours"
+              className="h-9 px-3 rounded-md border border-border bg-background text-sm w-[100px] disabled:opacity-50"
+            />
+            <span className="text-xs text-muted-foreground" data-testid="actual-hours-display">
+              {ticket.actualHours == null ? "—" : `${Number(ticket.actualHours)}h`}
+            </span>
+            {actualHoursMutation.isPending && (
+              <span className="text-xs text-muted-foreground">Saving…</span>
+            )}
+            {ticket.actualHours != null &&
+              ticket.estimatedHours != null &&
+              Number(ticket.actualHours) > Number(ticket.estimatedHours) * 1.2 && (
+                <Badge variant="destructive" className="ml-2 text-[10px]">
+                  Over estimate
+                </Badge>
+              )}
+          </div>
+          {actualHoursMutation.isError && (
+            <p className="text-xs text-destructive mt-1">Failed to update actual hours</p>
+          )}
         </DetailRow>
         <DetailRow label="Assigned to">
           <Select
@@ -237,6 +427,9 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
         </DetailRow>
       </div>
 
+      {/* Implementation request workflow panel — admin side */}
+      {ticket.type === TICKET_TYPE.IMPLEMENTATION && <ImplementationPanel ticket={ticket} />}
+
       {/* Description / message body */}
       <div>
         <div className="flex items-center gap-3 mb-2">
@@ -252,7 +445,55 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
           </Button>
         </div>
         <div className="border rounded-lg p-4 bg-muted/20">
-          <pre className="text-sm whitespace-pre-wrap font-sans leading-relaxed">{ticket.description}</pre>
+          {(() => {
+            const sections = ticket.description.split("\n\n---\n\n");
+            const generalAttachments = ticket.attachments.filter((a) => !ATTACHMENT_PREFIX_RE.test(a.filename));
+
+            if (sections.length === 1) {
+              const sectionAttachments = ticket.attachments.filter((a) => {
+                const m = a.filename.match(ATTACHMENT_PREFIX_RE);
+                return m ? Number(m[1]) === 0 : false;
+              });
+              return (
+                <>
+                  <pre className="text-sm whitespace-pre-wrap font-sans leading-relaxed">{ticket.description}</pre>
+                  <AttachmentRow attachments={[...sectionAttachments, ...generalAttachments]} />
+                </>
+              );
+            }
+
+            return (
+              <div className="space-y-4">
+                {sections.map((section, idx) => {
+                  const sectionAttachments = ticket.attachments.filter((a) => {
+                    const m = a.filename.match(ATTACHMENT_PREFIX_RE);
+                    return m ? Number(m[1]) === idx : false;
+                  });
+                  return (
+                    <div key={idx}>
+                      {idx > 0 && (
+                        <>
+                          <hr className="mb-3" style={{ borderColor: "var(--rt-border)" }} />
+                          <p className="text-xs font-semibold uppercase tracking-wide mb-2 text-muted-foreground">
+                            Description {idx + 1}
+                          </p>
+                        </>
+                      )}
+                      <pre className="text-sm whitespace-pre-wrap font-sans leading-relaxed">{section}</pre>
+                      <AttachmentRow attachments={sectionAttachments} />
+                    </div>
+                  );
+                })}
+                {generalAttachments.length > 0 && (
+                  <div>
+                    <hr className="mb-3" style={{ borderColor: "var(--rt-border)" }} />
+                    <p className="text-xs font-semibold uppercase tracking-wide mb-2 text-muted-foreground">Attachments</p>
+                    <AttachmentRow attachments={generalAttachments} />
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
         {summarizeMutation.isError && (
           <p className="text-xs text-destructive mt-2">Failed to summarize. Please try again.</p>
@@ -276,7 +517,7 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
               {Array.from({ length: 5 }).map((_, i) => (
                 <svg
                   key={i}
-                  className={`w-5 h-5 ${i < ticket.rating! ? "text-amber-400" : "text-gray-200"}`}
+                  className={`w-5 h-5 ${i < ticket.rating! ? "text-amber-400" : "text-muted-foreground/30"}`}
                   fill="currentColor"
                   viewBox="0 0 20 20"
                 >
@@ -284,7 +525,7 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
                 </svg>
               ))}
             </div>
-            <span className="text-sm font-semibold text-gray-700">{ticket.rating} / 5</span>
+            <span className="text-sm font-semibold text-foreground">{ticket.rating} / 5</span>
           </div>
           {ticket.ratingText && (
             <p className="mt-2 text-sm text-muted-foreground italic border-l-2 border-amber-300 pl-3">

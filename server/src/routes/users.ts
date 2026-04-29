@@ -6,6 +6,7 @@ import prisma from "../lib/prisma.js";
 import { requireAdmin } from "../middleware/auth.js";
 import { ROLES, STATUS, createUserSchema, editUserSchema } from "@tms/core";
 import { runHrmsSync } from "../workers/sync-hrms.js";
+import { getEmployeeDirectory } from "../lib/hrms.js";
 
 const router = Router();
 
@@ -13,16 +14,41 @@ const router = Router();
 router.use(requireAdmin);
 
 // GET /api/users — list all users (TMS accounts + HRMS employees merged)
-// HRMS employees without TMS accounts are auto-provisioned as Agents on first load.
+// HRMS employees without a TMS account appear as `source: "HRMS"` rows; the UI
+// can prompt the admin to "Add to System" which provisions a real TMS account.
 router.get("/", async (_req: Request, res: Response) => {
   try {
-    const users = await prisma.user.findMany({
-      where: { role: { in: [ROLES.ADMIN, ROLES.AGENT] } },
-      select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true },
-      orderBy: { createdAt: "desc" },
-    });
+    const [tmsUsers, hrmsEmployees] = await Promise.all([
+      prisma.user.findMany({
+        where:   { role: { in: [ROLES.ADMIN, ROLES.AGENT] } },
+        select:  { id: true, name: true, email: true, role: true, isActive: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+      }),
+      // Live fetch from HRMS-POC; returns [] if HRMS unconfigured
+      getEmployeeDirectory().catch(() => []),
+    ]);
 
-    res.json(users.map((u) => ({ ...u, createdAt: u.createdAt.toISOString(), source: "TMS" as const })));
+    const tmsEmailSet = new Set(tmsUsers.map((u) => u.email.toLowerCase()));
+    const tmsRows = tmsUsers.map((u) => ({
+      ...u,
+      createdAt: u.createdAt.toISOString(),
+      source:    "TMS" as const,
+    }));
+
+    // HRMS employees that don't yet have a TMS account
+    const hrmsRows = hrmsEmployees
+      .filter((e) => e.email && e.name && !tmsEmailSet.has(e.email.toLowerCase()))
+      .map((e) => ({
+        id:        e.id,
+        name:      e.name,
+        email:     e.email,
+        role:      ROLES.AGENT, // default role until provisioned
+        isActive:  true,
+        createdAt: new Date(0).toISOString(), // sentinel — HRMS doesn't expose joining date here
+        source:    "HRMS" as const,
+      }));
+
+    res.json([...tmsRows, ...hrmsRows]);
   } catch {
     res.status(500).json({ error: "Failed to fetch users" });
   }
@@ -261,6 +287,64 @@ router.post("/sync-hrms", async (_req: Request, res: Response) => {
     res.json(result);
   } catch {
     res.status(500).json({ error: "HRMS sync failed" });
+  }
+});
+
+// POST /api/users/import-hrms — create Right Tracker accounts for all active HRMS employees
+router.post("/import-hrms", async (_req: Request, res: Response) => {
+  try {
+    const hrmsEmployees = await getEmployeeDirectory();
+
+    if (hrmsEmployees.length === 0) {
+      res.json({ skipped: true, imported: 0, emails: [] });
+      return;
+    }
+
+    // Get all existing emails in the DB (any role)
+    const existingUsers = await prisma.user.findMany({
+      select: { email: true },
+    });
+    const existingEmails = new Set(existingUsers.map((u) => u.email.toLowerCase()));
+
+    const toImport = hrmsEmployees.filter(
+      (e) => e.email && !existingEmails.has(e.email.toLowerCase()),
+    );
+
+    const importedEmails: string[] = [];
+
+    for (const employee of toImport) {
+      const userId = randomUUID();
+      const hashedPassword = await hashPassword(randomUUID());
+
+      await prisma.$transaction(async (tx) => {
+        await tx.user.create({
+          data: {
+            id: userId,
+            name: employee.name,
+            email: employee.email,
+            role: ROLES.AGENT,
+            emailVerified: true,
+            isActive: true,
+          },
+        });
+        await tx.account.create({
+          data: {
+            id: randomUUID(),
+            userId,
+            accountId: userId,
+            providerId: "credential",
+            password: hashedPassword,
+          },
+        });
+      });
+
+      importedEmails.push(employee.email);
+    }
+
+    console.log(`[import-hrms] Imported ${importedEmails.length} employees from HRMS`);
+    res.json({ skipped: false, imported: importedEmails.length, emails: importedEmails });
+  } catch {
+    res.status(500).json({ error: "HRMS import failed" });
   }
 });
 

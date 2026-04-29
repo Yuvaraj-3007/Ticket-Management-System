@@ -10,7 +10,7 @@ async function fillAndSubmitLogin(
   email: string,
   password: string
 ) {
-  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Email address").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign In" }).click();
 }
@@ -41,9 +41,9 @@ test.describe("Login page rendering", () => {
     page,
   }) => {
     await expect(
-      page.getByText("Right Tracker")
+      page.getByRole("heading", { name: "Welcome back" })
     ).toBeVisible();
-    await expect(page.getByLabel("Email")).toBeVisible();
+    await expect(page.getByLabel("Email address")).toBeVisible();
     await expect(page.getByLabel("Password")).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Sign In" })
@@ -53,7 +53,7 @@ test.describe("Login page rendering", () => {
   test("email and password fields are empty on first load", async ({
     page,
   }) => {
-    await expect(page.getByLabel("Email")).toHaveValue("");
+    await expect(page.getByLabel("Email address")).toHaveValue("");
     await expect(page.getByLabel("Password")).toHaveValue("");
   });
 
@@ -92,7 +92,7 @@ test.describe("Successful login", () => {
     page,
   }) => {
     await page.goto("/login");
-    await page.getByLabel("Email").fill("admin@wisright.com");
+    await page.getByLabel("Email address").fill("admin@wisright.com");
     await page.getByLabel("Password").fill("Test@123");
 
     // Intercept the auth request so we can observe the in-flight state
@@ -109,7 +109,7 @@ test.describe("Successful login", () => {
     await requestPaused;
 
     await expect(
-      page.getByRole("button", { name: "Signing in..." })
+      page.getByRole("button", { name: "Signing in…" })
     ).toBeDisabled();
 
     await submitPromise;
@@ -128,8 +128,8 @@ test.describe("Client-side form validation", () => {
 
   test("shows error when email field is left empty", async ({ page }) => {
     // Trigger blur on email without typing to trigger onBlur validation
-    await page.getByLabel("Email").focus();
-    await page.getByLabel("Email").blur();
+    await page.getByLabel("Email address").focus();
+    await page.getByLabel("Email address").blur();
     await expect(
       page.getByText("Email is required")
     ).toBeVisible();
@@ -146,8 +146,8 @@ test.describe("Client-side form validation", () => {
   });
 
   test("shows invalid email format error", async ({ page }) => {
-    await page.getByLabel("Email").fill("notanemail");
-    await page.getByLabel("Email").blur();
+    await page.getByLabel("Email address").fill("notanemail");
+    await page.getByLabel("Email address").blur();
     await expect(
       page.getByText("Enter a valid email")
     ).toBeVisible();
@@ -156,8 +156,8 @@ test.describe("Client-side form validation", () => {
   test("shows invalid email format error for email missing domain", async ({
     page,
   }) => {
-    await page.getByLabel("Email").fill("user@");
-    await page.getByLabel("Email").blur();
+    await page.getByLabel("Email address").fill("user@");
+    await page.getByLabel("Email address").blur();
     await expect(
       page.getByText("Enter a valid email")
     ).toBeVisible();
@@ -176,8 +176,8 @@ test.describe("Client-side form validation", () => {
   test("does not show validation errors for a properly filled form", async ({
     page,
   }) => {
-    await page.getByLabel("Email").fill("admin@wisright.com");
-    await page.getByLabel("Email").blur();
+    await page.getByLabel("Email address").fill("admin@wisright.com");
+    await page.getByLabel("Email address").blur();
     await page.getByLabel("Password").fill("Test@123");
     await page.getByLabel("Password").blur();
 
@@ -426,8 +426,8 @@ test.describe("Edge cases and security inputs", () => {
   test("SQL injection in email field does not authenticate", async ({
     page,
   }) => {
-    await page.getByLabel("Email").fill("' OR '1'='1'; --");
-    await page.getByLabel("Email").blur();
+    await page.getByLabel("Email address").fill("' OR '1'='1'; --");
+    await page.getByLabel("Email address").blur();
     // Client-side Zod email validation catches this before it reaches the server
     await expect(page.getByText("Enter a valid email")).toBeVisible();
     await expect(page).toHaveURL("/login");
@@ -449,9 +449,9 @@ test.describe("Edge cases and security inputs", () => {
     page,
   }) => {
     await page
-      .getByLabel("Email")
+      .getByLabel("Email address")
       .fill('<script>alert("xss")</script>@evil.com');
-    await page.getByLabel("Email").blur();
+    await page.getByLabel("Email address").blur();
     await expect(page).toHaveURL("/login");
     // Script tag must not execute — page title must remain normal
     await expect(page).toHaveTitle(/Right Tracker/i);
@@ -522,8 +522,8 @@ test.describe("Edge cases and security inputs", () => {
   });
 
   test("whitespace-only email fails client validation", async ({ page }) => {
-    await page.getByLabel("Email").fill("   ");
-    await page.getByLabel("Email").blur();
+    await page.getByLabel("Email address").fill("   ");
+    await page.getByLabel("Email address").blur();
     // HTML input[type=email] trims; zod min(1) catches blank strings
     await expect(
       page.getByText(/email is required|enter a valid email/i)
@@ -533,8 +533,8 @@ test.describe("Edge cases and security inputs", () => {
   test("unicode characters in email are rejected as invalid format", async ({
     page,
   }) => {
-    await page.getByLabel("Email").fill("üser@münchen.de");
-    await page.getByLabel("Email").blur();
+    await page.getByLabel("Email address").fill("üser@münchen.de");
+    await page.getByLabel("Email address").blur();
     await expect(page).toHaveURL("/login");
     // Zod email validation will reject IDN addresses — no crash expected
     // (If the browser normalises the address and zod accepts it, that is

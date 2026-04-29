@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import axios, { AxiosError } from "axios";
-import { Trash2, Eye, EyeOff, RefreshCw } from "lucide-react";
+import { Trash2, Eye, EyeOff } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
   ROLES,
@@ -59,7 +59,7 @@ function Users() {
   const [provisioningId, setProvisioningId] = useState<string | null>(null);
   const [deleteConfirmUser, setDeleteConfirmUser] = useState<ApiUser | null>(null);
   const [showPassword, setShowPassword] = useState(false);
-  const [syncResult, setSyncResult] = useState<{ skipped: boolean; deactivated: string[]; reactivated: string[] } | null>(null);
+
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 10;
@@ -172,17 +172,6 @@ function Users() {
     },
   });
 
-  const syncMutation = useMutation({
-    mutationFn: () =>
-      axios.post(`${API_URL}/api/users/sync-hrms`, {}, { withCredentials: true }),
-    onSuccess: (res) => {
-      setSyncResult(res.data);
-      queryClient.invalidateQueries({ queryKey: ["users"] });
-    },
-    onError: () => {
-      setPageError("HRMS sync failed. Please try again.");
-    },
-  });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) =>
@@ -265,7 +254,7 @@ function Users() {
             <Skeleton className="h-9 w-24 rounded-lg" />
           </div>
 
-          <div className="border rounded-lg" style={{ background: "#ffffff" }}>
+          <div className="border rounded-lg bg-card">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -327,17 +316,7 @@ function Users() {
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ color: "var(--rt-text-1)" }}>Users</h1>
             <p className="mt-1 text-sm" style={{ color: "var(--rt-text-3)" }}>Manage team members and their access roles</p>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={() => { setSyncResult(null); syncMutation.mutate(); }}
-              disabled={syncMutation.isPending}
-            >
-              <RefreshCw className={`h-4 w-4 mr-2 ${syncMutation.isPending ? "animate-spin" : ""}`} />
-              {syncMutation.isPending ? "Syncing..." : "Sync HRMS"}
-            </Button>
-            <Button onClick={openCreateDialog} style={{ background: "var(--rt-accent)", color: "#fff" }}>Add User</Button>
-          </div>
+          <Button onClick={openCreateDialog} style={{ background: "var(--rt-accent)", color: "#fff" }}>Add User</Button>
         </div>
 
         {pageError && (
@@ -352,29 +331,6 @@ function Users() {
           </div>
         )}
 
-        {syncResult && (
-          <div className={`text-sm p-3 rounded-md mb-4 flex items-center justify-between ${
-            syncResult.skipped
-              ? "bg-yellow-50 text-yellow-800 border border-yellow-200"
-              : syncResult.deactivated.length === 0 && syncResult.reactivated.length === 0
-              ? "bg-green-50 text-green-800 border border-green-200"
-              : "bg-green-50 text-green-800 border border-green-200"
-          }`}>
-            <span>
-              {syncResult.skipped
-                ? "HRMS unavailable — sync skipped"
-                : syncResult.deactivated.length === 0 && syncResult.reactivated.length === 0
-                ? "Sync complete — no changes needed"
-                : `Sync complete: ${syncResult.deactivated.length} deactivated, ${syncResult.reactivated.length} reactivated`}
-            </span>
-            <button
-              onClick={() => setSyncResult(null)}
-              className="ml-2 text-xs underline opacity-70 hover:opacity-100"
-            >
-              Dismiss
-            </button>
-          </div>
-        )}
 
         <div className="mb-4">
           <Input
@@ -385,10 +341,10 @@ function Users() {
           />
         </div>
 
-        <div className="border rounded-lg overflow-hidden" style={{ background: "#ffffff" }}>
+        <div className="border rounded-lg overflow-hidden bg-card">
           <div className="overflow-x-auto">
           <Table className="min-w-[600px]">
-            <TableHeader style={{ background: "#f9fafb" }}>
+            <TableHeader style={{ background: "var(--rt-surface-2)" }}>
               <TableRow>
                 <TableHead className="font-bold text-xs uppercase tracking-wide" style={{ color: "var(--rt-text-1)" }}>Name</TableHead>
                 <TableHead className="font-bold text-xs uppercase tracking-wide" style={{ color: "var(--rt-text-1)" }}>Email</TableHead>

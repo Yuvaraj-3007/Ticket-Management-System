@@ -28,13 +28,19 @@ export async function runHrmsSync(): Promise<SyncResult> {
 
   const activeHrmsEmails = new Set(hrmsEmployees.map((e) => e.email.toLowerCase()));
 
+  // System accounts that are not HRMS employees and must never be deactivated by sync
+  const SYSTEM_EMAILS = new Set(["ai@system.internal"]);
+
   const agentUsers = await prisma.user.findMany({
     where: { role: ROLES.AGENT },
     select: { id: true, email: true, isActive: true },
   });
 
   const toDeactivate = agentUsers.filter(
-    (u) => u.isActive && !activeHrmsEmails.has(u.email.toLowerCase()),
+    (u) =>
+      u.isActive &&
+      !activeHrmsEmails.has(u.email.toLowerCase()) &&
+      !SYSTEM_EMAILS.has(u.email.toLowerCase()),
   );
   const toReactivate = agentUsers.filter(
     (u) => !u.isActive && activeHrmsEmails.has(u.email.toLowerCase()),

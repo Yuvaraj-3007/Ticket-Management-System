@@ -593,6 +593,57 @@ test.describe("POST /api/portal/:slug/tickets — image upload validation", () =
     expect(json.error).toMatch(/captcha/i);
   });
 
+  test("returns 400 when a polyglot file passes MIME/extension check but has wrong magic bytes", async ({ request }) => {
+    // Craft a PDF-header payload disguised as image/jpeg with a .jpg extension.
+    // The multer fileFilter allows it (correct MIME + extension), but validateMagicBytes
+    // should catch it because the first bytes are "%PDF" (0x25 0x50 0x44 0x46), not
+    // the JPEG SOI marker 0xFF 0xD8 0xFF.
+    const pdfHeader = Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E]); // "%PDF-1."
+    const htmlPayload = Buffer.from("<script>alert(1)</script>");
+    const polyglotBuffer = Buffer.concat([pdfHeader, htmlPayload]);
+
+    const res = await request.post(`${BASE}/api/portal/some-slug/tickets`, {
+      multipart: {
+        name:    "Mallory",
+        email:   "mallory@example.com",
+        subject: "Polyglot upload test",
+        body:    "Sneaking a PDF+HTML file as a JPEG.",
+        attachments: {
+          name:     "evil.jpg",        // correct extension for image/jpeg
+          mimeType: "image/jpeg",      // correct MIME type
+          buffer:   polyglotBuffer,    // but bytes start with PDF signature, not JPEG
+        },
+      },
+    });
+    // Magic byte check rejects it before any HRMS / DB work
+    expect(res.status()).toBe(400);
+    const json = await res.json();
+    expect(json.error).toMatch(/file-type validation/i);
+  });
+
+  test("returns 400 when a plain-text file is disguised as a PNG with correct MIME and extension", async ({ request }) => {
+    // Plain text has no image magic bytes — validateMagicBytes must reject it
+    // even though multer accepts the MIME type / extension combination.
+    const fakeBuffer = Buffer.from("This is not an image at all.");
+
+    const res = await request.post(`${BASE}/api/portal/some-slug/tickets`, {
+      multipart: {
+        name:    "Mallory",
+        email:   "mallory@example.com",
+        subject: "Fake PNG test",
+        body:    "Disguising text as PNG.",
+        attachments: {
+          name:     "photo.png",
+          mimeType: "image/png",
+          buffer:   fakeBuffer,
+        },
+      },
+    });
+    expect(res.status()).toBe(400);
+    const json = await res.json();
+    expect(json.error).toMatch(/file-type validation/i);
+  });
+
   test("returns 404 (not 400) when valid image + valid captcha but unknown slug", async ({ request }) => {
     const { code, token } = await getCaptcha(request);
     const validPng = Buffer.from(
@@ -678,5 +729,39 @@ test.describe("requireCustomer — admin is rejected from portal routes", () => 
     expect(res.status()).toBe(403);
     const json = await res.json();
     expect(json.error).toMatch(/customer/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Multi-description storage
+// ---------------------------------------------------------------------------
+
+test.describe("Multi-description body storage", () => {
+  test("ticket description stores multiple sections joined by separator", async ({ request }) => {
+    const body1 = "This is the first description of the issue.";
+    const body2 = "This is the second description with more details.";
+    const combined = `${body1}\n\n---\n\n${body2}`;
+
+    const res = await createTicketViaEmail(request, {
+      from:    "multidesc@example.com",
+      subject: "Multi-description test ticket",
+      body:    combined,
+    });
+    expect(res.status()).toBe(201);
+    const { ticketId } = await res.json();
+
+    // Fetch the ticket as admin and verify both sections are in the description
+    const loginRes = await loginAs(request, "admin@wisright.com", "Test@123");
+    expect(loginRes.status()).toBe(200);
+    const adminCookies = loginRes.headers()["set-cookie"] ?? "";
+
+    const tRes = await request.get(`${BASE}/api/tickets/${ticketId}`, {
+      headers: { Cookie: adminCookies },
+    });
+    expect(tRes.status()).toBe(200);
+    const ticket = await tRes.json();
+    expect(ticket.description).toContain(body1);
+    expect(ticket.description).toContain(body2);
+    expect(ticket.description).toContain("\n\n---\n\n");
   });
 });

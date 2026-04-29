@@ -29,6 +29,7 @@ export default defineConfig({
     {
       command: "cd server && bun run src/index.ts",
       port: 5001,
+      timeout: 120000,
       env: {
         ...process.env,
         PORT: "5001",
@@ -44,6 +45,7 @@ export default defineConfig({
     {
       command: "cd client && bun run dev --port 5175",
       port: 5175,
+      timeout: 120000,
       env: {
         ...process.env,
         VITE_API_URL: "http://localhost:5175",

@@ -1,6 +1,22 @@
-import { hashPassword } from "better-auth/crypto";
+import { randomBytes, scrypt } from "node:crypto";
+import { promisify } from "node:util";
 import { ROLES } from "@tms/core";
 import prisma from "../src/lib/prisma.js";
+
+const scryptAsync = promisify(scrypt);
+
+// Matches better-auth's hashPassword format: "<hex-salt>:<hex-key>"
+// Uses the same scrypt params as better-auth (N=16384, r=16, p=1, dkLen=64)
+async function hashPassword(password: string): Promise<string> {
+  const salt = randomBytes(16).toString("hex");
+  const key = (await scryptAsync(password.normalize("NFKC"), salt, 64, {
+    N: 16384,
+    r: 16,
+    p: 1,
+    maxmem: 128 * 16384 * 16 * 2,
+  })) as Buffer;
+  return `${salt}:${key.toString("hex")}`;
+}
 
 async function main() {
   const email = process.env.ADMIN_EMAIL;
@@ -14,7 +30,14 @@ async function main() {
   const existingUser = await prisma.user.findUnique({ where: { email } });
 
   if (existingUser) {
-    console.log("Admin user already exists, skipping seed.");
+    // Always sync the password from ADMIN_PASSWORD env var so a redeploy
+    // with a new password takes effect without manual DB intervention.
+    const hashedPassword = await hashPassword(password);
+    await prisma.account.updateMany({
+      where: { userId: existingUser.id, providerId: "credential" },
+      data: { password: hashedPassword },
+    });
+    console.log("Admin user already exists, password synced from ADMIN_PASSWORD.");
   } else {
     const hashedPassword = await hashPassword(password);
     const userId = crypto.randomUUID();

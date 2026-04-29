@@ -809,3 +809,65 @@ test.describe("Polish — UI", () => {
     await expect(polishBtn).toBeEnabled();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Suite 12 — New enum values: WAITING_FOR_CLIENT status + EXPLANATION type
+// ---------------------------------------------------------------------------
+
+test.describe("New enum values — status & type", () => {
+  let newEnumTicketId: string;
+
+  test.beforeAll(async ({ request }) => {
+    await apiSignIn(request);
+    newEnumTicketId = await seedTicket(request, { subject: "New enum values test" });
+  });
+
+  test("PATCH /status accepts WAITING_FOR_CLIENT via API", async ({ request }) => {
+    await apiSignIn(request);
+    const res = await request.patch(`${BASE}/api/tickets/${newEnumTicketId}/status`, {
+      data: { status: "WAITING_FOR_CLIENT" },
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe("WAITING_FOR_CLIENT");
+  });
+
+  test("PATCH /type accepts EXPLANATION via API", async ({ request }) => {
+    await apiSignIn(request);
+    const res = await request.patch(`${BASE}/api/tickets/${newEnumTicketId}/type`, {
+      data: { type: "EXPLANATION" },
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.type).toBe("EXPLANATION");
+  });
+
+  test("Waiting for Client appears as option in tickets list status filter", async ({ page }) => {
+    // Use the status filter dropdown on the tickets list — simpler and reliable
+    await page.route(/\/api\/tickets(\?.*)?$/, (route) =>
+      route.fulfill({ status: 200, contentType: "application/json",
+        body: JSON.stringify({ data: [], total: 0, page: 1, pageSize: 10, totalPages: 0 }) })
+    );
+    await loginAsAdmin(page);
+    await page.goto("/tickets");
+    await expect(page.getByRole("heading", { name: "Tickets" })).toBeVisible();
+    // Open the status filter Select and look for the new option
+    await page.getByText("All statuses").click();
+    await expect(page.getByText("Waiting for Client")).toBeVisible();
+  });
+
+  test("Explanation appears as option in tickets list category filter", async ({ page }) => {
+    await page.route(/\/api\/tickets(\?.*)?$/, (route) =>
+      route.fulfill({ status: 200, contentType: "application/json",
+        body: JSON.stringify({ data: [], total: 0, page: 1, pageSize: 10, totalPages: 0 }) })
+    );
+    await loginAsAdmin(page);
+    await page.goto("/tickets");
+    await expect(page.getByRole("heading", { name: "Tickets" })).toBeVisible();
+    // Open the category filter Select and look for the new option
+    await page.getByText("All categories").click();
+    await expect(page.getByText("Explanation")).toBeVisible();
+  });
+});

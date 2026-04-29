@@ -114,7 +114,7 @@ function TicketReplies({ ticketId }: TicketRepliesProps) {
                     target="_blank"
                     rel="noopener noreferrer"
                     title={att.filename}
-                    className="group relative block w-20 h-20 rounded-lg overflow-hidden border border-gray-200 hover:border-orange-400 transition-colors"
+                    className="group relative block w-20 h-20 rounded-lg overflow-hidden border border-border hover:border-accent transition-colors"
                   >
                     <img src={att.url} alt={att.filename} className="w-full h-full object-cover" loading="lazy" />
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
@@ -156,7 +156,7 @@ function TicketReplies({ ticketId }: TicketRepliesProps) {
                     href={att.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="group relative block w-16 h-16 rounded overflow-hidden border border-gray-200 hover:border-orange-400 transition-colors"
+                    className="group relative block w-16 h-16 rounded overflow-hidden border border-border hover:border-accent transition-colors"
                     title={att.filename}
                   >
                     <img src={att.url} alt={att.filename} className="w-full h-full object-cover" loading="lazy" />

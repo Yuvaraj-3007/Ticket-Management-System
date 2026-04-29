@@ -176,9 +176,11 @@ export async function watchInbox(): Promise<void> {
   } catch (err: any) {
     const code   = err?.response?.status ?? err?.code;
     const data   = err?.response?.data ?? err?.message ?? String(err);
-    console.error(`[gmail] Failed (HTTP ${code}):`, JSON.stringify(data, null, 2));
-    if (err?.response?.data?.error === "invalid_grant") {
-      console.error("[gmail] HINT: Refresh token is invalid or expired. Run: bun run scripts/gmail-auth.ts");
+    const isTokenExpired = err?.response?.data?.error === "invalid_grant";
+    if (isTokenExpired) {
+      console.warn("[gmail] Refresh token expired — Gmail Pub/Sub disabled. Re-run scripts/gmail-auth.ts to fix.");
+    } else {
+      console.error(`[gmail] Failed to start inbox watch (HTTP ${code}):`, JSON.stringify(data, null, 2));
     }
   }
 }

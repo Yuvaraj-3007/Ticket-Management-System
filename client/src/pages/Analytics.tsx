@@ -63,7 +63,7 @@ const STATUS_COLORS: Record<string, string> = {
   CLOSED:           "#22C55E",
 };
 
-const TYPE_COLORS = ["#F97316", "#3B82F6", "#8B5CF6", "#22C55E"];
+const TYPE_COLORS = ["#cc0000", "#3B82F6", "#8B5CF6", "#22C55E"];
 
 const OPEN_STATUSES = ["OPEN_NOT_STARTED", "OPEN_IN_PROGRESS", "OPEN_QA", "OPEN_DONE"];
 
@@ -92,21 +92,22 @@ function SummaryCard({
     <div
       className={`rounded-xl border p-5 ${
         accent
-          ? "bg-orange-500 text-white border-orange-500"
-          : "bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700"
+          ? "text-white border-[#cc0000]"
+          : "bg-card border-border"
       }`}
+      style={accent ? { background: "linear-gradient(135deg, #0a0000 0%, #990000 50%, #cc0000 100%)" } : {}}
     >
-      <p className={`text-xs font-medium uppercase tracking-wide mb-1 ${accent ? "text-orange-100" : "text-gray-500 dark:text-gray-400"}`}>
+      <p className={`text-xs font-medium uppercase tracking-wide mb-1 ${accent ? "text-red-100" : "text-muted-foreground"}`}>
         {label}
       </p>
-      <p className={`text-3xl font-bold ${accent ? "text-white" : "text-gray-900 dark:text-gray-100"}`}>{value}</p>
+      <p className={`text-3xl font-bold ${accent ? "text-white" : "text-foreground"}`}>{value}</p>
     </div>
   );
 }
 
 function SectionHeader({ title }: { title: string }) {
   return (
-    <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">{title}</h2>
+    <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-4">{title}</h2>
   );
 }
 
@@ -138,10 +139,10 @@ function CustomTooltip({
 }) {
   if (!active || !payload || payload.length === 0) return null;
   return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 text-sm">
-      {label && <p className="font-medium text-gray-700 mb-1">{label}</p>}
+    <div className="bg-popover border border-border rounded-lg shadow-lg px-3 py-2 text-sm">
+      {label && <p className="font-medium text-foreground mb-1">{label}</p>}
       {payload.map((p, i) => (
-        <p key={i} className="text-gray-600">
+        <p key={i} className="text-muted-foreground">
           {p.name === "avgHours" ? `${p.value}h avg` : `${p.value} ticket${p.value !== 1 ? "s" : ""}`}
         </p>
       ))}
@@ -155,7 +156,7 @@ function StarRating({ rating }: { rating: number }) {
       {Array.from({ length: 5 }).map((_, i) => (
         <svg
           key={i}
-          className={`w-5 h-5 ${i < Math.round(rating) ? "text-amber-400" : "text-gray-200"}`}
+          className={`w-5 h-5 ${i < Math.round(rating) ? "text-amber-400" : "text-muted-foreground/30"}`}
           fill="currentColor"
           viewBox="0 0 20 20"
         >
@@ -241,8 +242,8 @@ export default function Analytics() {
     <div className="px-4 sm:px-6 py-6 sm:py-8 space-y-10 max-w-7xl mx-auto">
       {/* Page title */}
       <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">Analytics</h1>
-        <p className="text-sm text-gray-500 mt-1">Ticket activity, agent performance, and customer satisfaction</p>
+        <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Analytics</h1>
+        <p className="text-sm text-muted-foreground mt-1">Ticket activity, agent performance, and customer satisfaction</p>
       </div>
 
       {/* ── Summary cards ── */}
@@ -256,20 +257,20 @@ export default function Analytics() {
 
       {/* ── Ticket Volume (last 30 days) ── */}
       {volumeChartData.length > 0 && (
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-6">
+        <div className="bg-card border border-border rounded-xl p-6">
           <SectionHeader title="Ticket Volume (last 30 days)" />
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={volumeChartData} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--rt-border)" />
               <XAxis
                 dataKey="date"
-                tick={{ fontSize: 11, fill: "#9CA3AF" }}
+                tick={{ fontSize: 11, fill: "var(--rt-text-3)" }}
                 tickLine={false}
                 axisLine={false}
                 interval="preserveStartEnd"
               />
               <YAxis
-                tick={{ fontSize: 11, fill: "#9CA3AF" }}
+                tick={{ fontSize: 11, fill: "var(--rt-text-3)" }}
                 tickLine={false}
                 axisLine={false}
                 allowDecimals={false}
@@ -278,10 +279,10 @@ export default function Analytics() {
               <Line
                 type="monotone"
                 dataKey="count"
-                stroke="#F97316"
+                stroke="#cc0000"
                 strokeWidth={2}
                 dot={false}
-                activeDot={{ r: 4, fill: "#F97316" }}
+                activeDot={{ r: 4, fill: "#cc0000" }}
               />
             </LineChart>
           </ResponsiveContainer>
@@ -289,7 +290,7 @@ export default function Analytics() {
       )}
 
       {/* ── Customer Satisfaction ── */}
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-6">
+      <div className="bg-card border border-border rounded-xl p-6">
         <SectionHeader title="Customer Satisfaction" />
         {data.avgRating != null ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-center">
@@ -297,7 +298,7 @@ export default function Analytics() {
             <div className="flex flex-col items-center justify-center py-4">
               <p className="text-6xl font-bold text-amber-500 mb-2">{data.avgRating}</p>
               <StarRating rating={data.avgRating} />
-              <p className="text-sm text-gray-500 mt-2">
+              <p className="text-sm text-muted-foreground mt-2">
                 Average from {data.ratedCount} rating{data.ratedCount !== 1 ? "s" : ""}
               </p>
             </div>
@@ -311,7 +312,7 @@ export default function Analytics() {
                 >
                   <XAxis
                     type="number"
-                    tick={{ fontSize: 11, fill: "#9CA3AF" }}
+                    tick={{ fontSize: 11, fill: "var(--rt-text-3)" }}
                     tickLine={false}
                     axisLine={false}
                     allowDecimals={false}
@@ -319,7 +320,7 @@ export default function Analytics() {
                   <YAxis
                     type="category"
                     dataKey="stars"
-                    tick={{ fontSize: 12, fill: "#374151" }}
+                    tick={{ fontSize: 12, fill: "var(--rt-text-3)" }}
                     tickLine={false}
                     axisLine={false}
                     width={32}
@@ -331,13 +332,13 @@ export default function Analytics() {
             </div>
           </div>
         ) : (
-          <p className="text-sm text-gray-500 py-4 text-center">No customer ratings yet.</p>
+          <p className="text-sm text-muted-foreground py-4 text-center">No customer ratings yet.</p>
         )}
       </div>
 
       {/* ── Status & Priority row ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-6">
+        <div className="bg-card border border-border rounded-xl p-6">
           <SectionHeader title="Status Breakdown" />
           <ResponsiveContainer width="100%" height={240}>
             <PieChart>
@@ -359,14 +360,14 @@ export default function Analytics() {
                 iconType="circle"
                 iconSize={8}
                 formatter={(value) => (
-                  <span style={{ fontSize: 12, color: "#6B7280" }}>{value}</span>
+                  <span style={{ fontSize: 12, color: "var(--rt-text-3)" }}>{value}</span>
                 )}
               />
             </PieChart>
           </ResponsiveContainer>
         </div>
 
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-6">
+        <div className="bg-card border border-border rounded-xl p-6">
           <SectionHeader title="Priority Breakdown" />
           <ResponsiveContainer width="100%" height={240}>
             <PieChart>
@@ -388,7 +389,7 @@ export default function Analytics() {
                 iconType="circle"
                 iconSize={8}
                 formatter={(value) => (
-                  <span style={{ fontSize: 12, color: "#6B7280" }}>{value}</span>
+                  <span style={{ fontSize: 12, color: "var(--rt-text-3)" }}>{value}</span>
                 )}
               />
             </PieChart>
@@ -400,7 +401,7 @@ export default function Analytics() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Top Clients */}
         {data.byClient.length > 0 && (
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-6">
+          <div className="bg-card border border-border rounded-xl p-6">
             <SectionHeader title="Top Clients" />
             <ResponsiveContainer width="100%" height={Math.max(data.byClient.length * 40, 160)}>
               <BarChart
@@ -410,7 +411,7 @@ export default function Analytics() {
               >
                 <XAxis
                   type="number"
-                  tick={{ fontSize: 11, fill: "#9CA3AF" }}
+                  tick={{ fontSize: 11, fill: "var(--rt-text-3)" }}
                   tickLine={false}
                   axisLine={false}
                   allowDecimals={false}
@@ -418,7 +419,7 @@ export default function Analytics() {
                 <YAxis
                   type="category"
                   dataKey="clientName"
-                  tick={{ fontSize: 10, fill: "#374151" }}
+                  tick={{ fontSize: 10, fill: "var(--rt-text-3)" }}
                   tickLine={false}
                   axisLine={false}
                   width={80}
@@ -432,7 +433,7 @@ export default function Analytics() {
 
         {/* Avg Resolution by Priority */}
         {resolutionData.length > 0 && (
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-6">
+          <div className="bg-card border border-border rounded-xl p-6">
             <SectionHeader title="Avg Resolution Time by Priority" />
             <ResponsiveContainer width="100%" height={Math.max(resolutionData.length * 48, 160)}>
               <BarChart
@@ -443,14 +444,14 @@ export default function Analytics() {
                 <XAxis
                   type="number"
                   unit="h"
-                  tick={{ fontSize: 11, fill: "#9CA3AF" }}
+                  tick={{ fontSize: 11, fill: "var(--rt-text-3)" }}
                   tickLine={false}
                   axisLine={false}
                 />
                 <YAxis
                   type="category"
                   dataKey="name"
-                  tick={{ fontSize: 12, fill: "#374151" }}
+                  tick={{ fontSize: 12, fill: "var(--rt-text-3)" }}
                   tickLine={false}
                   axisLine={false}
                   width={70}
@@ -469,7 +470,7 @@ export default function Analytics() {
 
       {/* ── Category Breakdown ── */}
       {typeChartData.length > 0 && (
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-6">
+        <div className="bg-card border border-border rounded-xl p-6">
           <SectionHeader title="Category Breakdown" />
           <ResponsiveContainer width="100%" height={Math.max(typeChartData.length * 48, 160)}>
             <BarChart
@@ -479,7 +480,7 @@ export default function Analytics() {
             >
               <XAxis
                 type="number"
-                tick={{ fontSize: 11, fill: "#9CA3AF" }}
+                tick={{ fontSize: 11, fill: "var(--rt-text-3)" }}
                 tickLine={false}
                 axisLine={false}
                 allowDecimals={false}
@@ -487,7 +488,7 @@ export default function Analytics() {
               <YAxis
                 type="category"
                 dataKey="name"
-                tick={{ fontSize: 10, fill: "#374151" }}
+                tick={{ fontSize: 10, fill: "var(--rt-text-3)" }}
                 tickLine={false}
                 axisLine={false}
                 width={80}
@@ -505,29 +506,29 @@ export default function Analytics() {
 
       {/* ── Agent Performance ── */}
       {data.agentStats.length > 0 && (
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-6">
+        <div className="bg-card border border-border rounded-xl p-6">
           <SectionHeader title="Agent Performance" />
           <div className="overflow-x-auto">
             <table className="min-w-[700px] w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Name</th>
-                  <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Role</th>
-                  <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Assigned</th>
-                  <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Closed</th>
-                  <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Comments</th>
-                  <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Avg Rating</th>
+                <tr className="border-b border-border">
+                  <th className="text-left py-2 px-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Name</th>
+                  <th className="text-left py-2 px-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Role</th>
+                  <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Assigned</th>
+                  <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Closed</th>
+                  <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Comments</th>
+                  <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Avg Rating</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-border">
                 {data.agentStats.map((agent) => (
-                  <tr key={agent.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="py-3 px-3 font-medium text-gray-900">{agent.name}</td>
-                    <td className="py-3 px-3 text-gray-500 capitalize">
+                  <tr key={agent.id} className="hover:bg-muted transition-colors">
+                    <td className="py-3 px-3 font-medium text-foreground">{agent.name}</td>
+                    <td className="py-3 px-3 text-muted-foreground capitalize">
                       {agent.role.charAt(0) + agent.role.slice(1).toLowerCase()}
                     </td>
                     <td className="py-3 px-3 text-right">
-                      <span className="inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-700">
+                      <span className="inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: "rgba(204,0,0,0.1)", color: "#cc0000" }}>
                         {agent.assignedTickets}
                       </span>
                     </td>
@@ -550,7 +551,7 @@ export default function Analytics() {
                           {agent.avgRating}
                         </span>
                       ) : (
-                        <span className="text-xs text-gray-400">—</span>
+                        <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </td>
                   </tr>

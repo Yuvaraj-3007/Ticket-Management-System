@@ -1,5 +1,5 @@
 import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
-import { type StatusValue, type TicketTypeValue, STATUSES } from "@tms/core";
+import { type StatusValue, type TicketTypeValue, STATUSES, TICKET_TYPES } from "@tms/core";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -181,7 +181,7 @@ test.describe("GET /api/tickets — API", () => {
   test("type values conform to TicketTypeValue", async ({ request }) => {
     await apiSignIn(request);
     const tickets = await getTickets(request);
-    const valid: TicketTypeValue[] = ["BUG", "REQUIREMENT", "TASK", "SUPPORT"];
+    const valid: TicketTypeValue[] = [...TICKET_TYPES];
     for (const t of tickets) {
       expect(valid).toContain(t.type);
     }
@@ -401,5 +401,141 @@ test.describe("GET /api/tickets — assignee and date filters", () => {
     for (const t of body.data as Array<{ assignedTo: unknown }>) {
       expect(t.assignedTo).toBeNull();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite 8 — New status & type values (API)
+// ---------------------------------------------------------------------------
+
+test.describe("New enum values — API", () => {
+  test("PATCH /status accepts WAITING_FOR_CLIENT", async ({ request }) => {
+    await apiSignIn(request);
+    const tickets = await getTickets(request);
+    expect(tickets.length).toBeGreaterThan(0);
+    const ticketId = tickets[0].ticketId as string;
+
+    const res = await request.patch(`${BASE}/api/tickets/${ticketId}/status`, {
+      data: { status: "WAITING_FOR_CLIENT" },
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe("WAITING_FOR_CLIENT");
+
+    // Reset to avoid polluting other tests
+    await request.patch(`${BASE}/api/tickets/${ticketId}/status`, {
+      data: { status: "OPEN_NOT_STARTED" },
+      headers: { "Content-Type": "application/json" },
+    });
+  });
+
+  test("PATCH /type accepts EXPLANATION", async ({ request }) => {
+    await apiSignIn(request);
+    const tickets = await getTickets(request);
+    expect(tickets.length).toBeGreaterThan(0);
+    const ticketId = tickets[0].ticketId as string;
+
+    const res = await request.patch(`${BASE}/api/tickets/${ticketId}/type`, {
+      data: { type: "EXPLANATION" },
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.type).toBe("EXPLANATION");
+
+    // Reset
+    await request.patch(`${BASE}/api/tickets/${ticketId}/type`, {
+      data: { type: "SUPPORT" },
+      headers: { "Content-Type": "application/json" },
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite 9 — Ticket slide panel (UI)
+// ---------------------------------------------------------------------------
+
+/** Mock tickets API with one real ticket so the panel has data to show. */
+async function mockTicketsApiWithData(page: Page) {
+  const mockTicket = {
+    id:                 "test-id-001",
+    ticketId:           "TKT-0001",
+    title:              "Backend Admin - AI Reports are not accurate",
+    description:        "The AI reports dashboard shows incorrect figures.",
+    type:               "BUG",
+    priority:           "HIGH",
+    status:             "OPEN_IN_PROGRESS",
+    project:            "Drive-EV",
+    senderName:         "Ian",
+    senderEmail:        "ian@drive-ev.com",
+    assignedTo:         { id: "agent-1", name: "Yuvaraj Pandian" },
+    createdBy:          { id: "admin-1", name: "Admin" },
+    createdAt:          "2026-04-06T08:00:00.000Z",
+    updatedAt:          "2026-04-06T08:00:00.000Z",
+    lastCustomerReplyAt: null,
+    attachments:        [],
+  };
+  await page.route(/\/api\/tickets(\?.*)?$/, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ data: [mockTicket], total: 1, page: 1, pageSize: 10, totalPages: 1 }),
+    })
+  );
+  await page.route(/\/api\/tickets\/assignable-users/, (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) })
+  );
+  await page.route(/\/api\/tickets\/clients/, (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) })
+  );
+}
+
+test.describe("Ticket list slide panel", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockTicketsApiWithData(page);
+    await loginAsAdmin(page);
+    await goToTicketsPage(page);
+  });
+
+  test("clicking a non-link cell navigates to the ticket detail page", async ({ page }) => {
+    const firstRow = page.locator("tbody tr").first();
+    await firstRow.waitFor({ state: "visible" });
+    // Click the Sender cell (no link inside) — row click should navigate
+    await firstRow.locator("td").nth(2).click();
+    await expect(page).toHaveURL(/\/tickets\/TKT-0001/);
+  });
+
+  test("clicking the eye icon opens the slide panel", async ({ page }) => {
+    const firstRow = page.locator("tbody tr").first();
+    await firstRow.waitFor({ state: "visible" });
+    // Eye icon is the Quick view button in the last actions column
+    await firstRow.getByRole("button", { name: "Quick view" }).click();
+    // Panel content renders only when open (conditional rendering)
+    await expect(page.getByText("Open Full Ticket")).toBeVisible();
+  });
+
+  test("panel shows ticket metadata unique to the panel", async ({ page }) => {
+    const firstRow = page.locator("tbody tr").first();
+    await firstRow.waitFor({ state: "visible" });
+    await firstRow.getByRole("button", { name: "Quick view" }).click();
+    // Assignee name appears only in the panel MetaRow, not in the table
+    await expect(page.getByText("Yuvaraj Pandian")).toBeVisible();
+  });
+
+  test("clicking X button closes the panel", async ({ page }) => {
+    const firstRow = page.locator("tbody tr").first();
+    await firstRow.waitFor({ state: "visible" });
+    await firstRow.getByRole("button", { name: "Quick view" }).click();
+    await expect(page.getByText("Open Full Ticket")).toBeVisible();
+    // Click the close (X) button — it's inside the panel header
+    await page.getByRole("button").filter({ has: page.locator("svg") }).last().click();
+    await expect(page.getByText("Open Full Ticket")).not.toBeVisible();
+  });
+
+  test("clicking the ticket ID link navigates to the ticket detail page", async ({ page }) => {
+    const idLink = page.getByRole("link", { name: "TKT-0001" }).first();
+    await idLink.click();
+    await expect(page).not.toHaveURL("/tickets");
   });
 });

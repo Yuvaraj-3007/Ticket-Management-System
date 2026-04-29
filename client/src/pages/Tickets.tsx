@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import axios from "axios";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -12,17 +12,22 @@ import {
 import {
   paginatedTicketsSchema,
   type ApiTicket,
+  TICKET_TYPE,
   TICKET_TYPES,
   PRIORITIES,
+  STATUSES,
   type TicketTypeValue,
   type PriorityValue,
   type StatusValue,
 } from "@tms/core";
 import {
+  CATEGORY_CLASS,
   CATEGORY_LABELS,
   PRIORITY_LABELS,
   STATUS_LABELS,
 } from "@/lib/ticket-badges";
+import { STATUS_CONFIG } from "@/lib/status-config";
+import { TicketSlidePanel } from "@/components/TicketSlidePanel";
 import {
   Select,
   SelectContent,
@@ -30,30 +35,31 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Link, useSearchParams } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ChevronUp,
   ChevronDown,
   ChevronsUpDown,
+  Eye,
   X,
   Search,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react";
 
 const API_URL = import.meta.env.VITE_API_URL || "";
 
-// ── Semantic design tokens (intentional fixed colors) ─────────────────────────
+// Tab filter buckets — drives the type[] sent to GET /api/tickets
+type TabFilter = "all" | "bug" | "impl";
+const BUG_TYPES: readonly TicketTypeValue[] = [
+  TICKET_TYPE.BUG,
+  TICKET_TYPE.REQUIREMENT,
+  TICKET_TYPE.TASK,
+  TICKET_TYPE.SUPPORT,
+  TICKET_TYPE.EXPLANATION,
+];
+const IMPL_TYPES: readonly TicketTypeValue[] = [TICKET_TYPE.IMPLEMENTATION];
 
-// CSS variables handle light/dark automatically — defined in index.css
-const STATUS_CONFIG: Record<string, { dot: string; text: string; bg: string }> = {
-  UN_ASSIGNED:      { dot: "var(--status-un-assigned-dot)",       text: "var(--status-un-assigned-text)",       bg: "var(--status-un-assigned-bg)"       },
-  OPEN_NOT_STARTED: { dot: "var(--status-open-not-started-dot)",  text: "var(--status-open-not-started-text)",  bg: "var(--status-open-not-started-bg)"  },
-  OPEN_IN_PROGRESS: { dot: "var(--status-open-in-progress-dot)",  text: "var(--status-open-in-progress-text)",  bg: "var(--status-open-in-progress-bg)"  },
-  OPEN_QA:          { dot: "var(--status-open-qa-dot)",           text: "var(--status-open-qa-text)",           bg: "var(--status-open-qa-bg)"           },
-  OPEN_DONE:        { dot: "var(--status-open-done-dot)",         text: "var(--status-open-done-text)",         bg: "var(--status-open-done-bg)"         },
-  CLOSED:           { dot: "var(--status-closed-dot)",            text: "var(--status-closed-text)",            bg: "var(--status-closed-bg)"            },
-};
+// ── Semantic design tokens (intentional fixed colors) ─────────────────────────
 
 const PRIORITY_CONFIG: Record<string, { bar: string; textDark: string; textLight: string }> = {
   CRITICAL: { bar: "#EF4444", textDark: "#FCA5A5", textLight: "#B91C1C" },
@@ -84,6 +90,7 @@ const columns = [
         to={`/tickets/${info.row.original.id}`}
         className="font-mono text-xs font-semibold"
         style={{ color: "var(--rt-accent)", textDecoration: "none" }}
+        onClick={(e) => e.stopPropagation()}
       >
         {info.getValue()}
       </Link>
@@ -99,6 +106,7 @@ const columns = [
           to={`/tickets/${row.ticketId}`}
           className="text-sm font-medium line-clamp-1 transition-colors duration-150"
           style={{ color: "var(--rt-text-1)", textDecoration: "none" }}
+          onClick={(e) => e.stopPropagation()}
           onMouseEnter={(e) => ((e.currentTarget as HTMLAnchorElement).style.color = "var(--rt-accent)")}
           onMouseLeave={(e)  => ((e.currentTarget as HTMLAnchorElement).style.color = "var(--rt-text-1)")}
         >
@@ -141,11 +149,24 @@ const columns = [
   }),
   col.accessor("type", {
     header: "Category",
-    cell: (info) => (
-      <span className="text-xs" style={{ color: "var(--rt-text-3)" }}>
-        {CATEGORY_LABELS[info.getValue()]}
-      </span>
-    ),
+    cell: (info) => {
+      const v   = info.getValue();
+      const cls = CATEGORY_CLASS[v];
+      if (cls) {
+        return (
+          <span
+            className={`inline-flex items-center px-2 py-0.5 rounded border text-xs font-medium ${cls}`}
+          >
+            {CATEGORY_LABELS[v]}
+          </span>
+        );
+      }
+      return (
+        <span className="text-xs" style={{ color: "var(--rt-text-3)" }}>
+          {CATEGORY_LABELS[v]}
+        </span>
+      );
+    },
   }),
   col.accessor("priority", {
     header: "Priority",
@@ -223,6 +244,7 @@ function Tickets() {
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 10 });
   const [searchInput, setSearchInput]       = useState("");
   const [search, setSearch]                 = useState("");
+  const [tabFilter, setTabFilter]           = useState<TabFilter>("all");
   const [statusFilter, setStatusFilter]     = useState<StatusValue | "">("");
   const [priorityFilter, setPriorityFilter] = useState<PriorityValue | "">("");
   const [typeFilter, setTypeFilter]         = useState<TicketTypeValue | "">("");
@@ -230,6 +252,31 @@ function Tickets() {
   const [clientFilter,  setClientFilter]   = useState(searchParams.get("clientId") ?? "");
   const [dateFrom, setDateFrom]             = useState("");
   const [dateTo, setDateTo]                 = useState("");
+  const [selectedTicket, setSelectedTicket] = useState<ApiTicket | null>(null);
+  const closePanel = useCallback(() => setSelectedTicket(null), []);
+  const navigate = useNavigate();
+
+  const allColumns = useMemo(
+    () => [
+      ...columns,
+      col.display({
+        id: "actions",
+        header: "Action",
+        enableSorting: false,
+        cell: (info) => (
+          <button
+            onClick={(e) => { e.stopPropagation(); setSelectedTicket(info.row.original); }}
+            className="p-1 rounded-md opacity-30 hover:opacity-100 transition-opacity"
+            style={{ color: "var(--rt-text-2)" }}
+            title="Quick view"
+          >
+            <Eye className="h-4 w-4" />
+          </button>
+        ),
+      }),
+    ],
+    [setSelectedTicket]
+  );
 
   useEffect(() => {
     const t = setTimeout(() => setSearch(searchInput.trim()), 300);
@@ -238,11 +285,19 @@ function Tickets() {
 
   useEffect(() => {
     setPagination((p) => ({ ...p, pageIndex: 0 }));
-  }, [search, statusFilter, priorityFilter, typeFilter, assigneeFilter, clientFilter, dateFrom, dateTo]);
+  }, [search, tabFilter, statusFilter, priorityFilter, typeFilter, assigneeFilter, clientFilter, dateFrom, dateTo]);
 
   const hasFilters =
     search !== "" || statusFilter !== "" || priorityFilter !== "" || typeFilter !== "" ||
     assigneeFilter !== "" || clientFilter !== "" || dateFrom !== "" || dateTo !== "";
+
+  // Effective type filter sent to the server. Tabs win when active so the user
+  // doesn't see contradictory filters (the dropdown is hidden in those tabs).
+  const effectiveTypeFilter: readonly TicketTypeValue[] | null =
+    tabFilter === "bug"  ? BUG_TYPES :
+    tabFilter === "impl" ? IMPL_TYPES :
+    typeFilter           ? [typeFilter] :
+    null;
 
   function clearFilters() {
     setSearchInput(""); setSearch("");
@@ -269,7 +324,7 @@ function Tickets() {
   });
 
   const { data: result, isLoading, isError } = useQuery({
-    queryKey: ["tickets", sorting, pagination, search, statusFilter, priorityFilter, typeFilter, assigneeFilter, clientFilter, dateFrom, dateTo],
+    queryKey: ["tickets", sorting, pagination, search, tabFilter, statusFilter, priorityFilter, typeFilter, assigneeFilter, clientFilter, dateFrom, dateTo],
     queryFn: async () => {
       const sortCol = sorting[0]?.id ?? "createdAt";
       const sortDir = sorting[0]?.desc !== false ? "desc" : "asc";
@@ -281,7 +336,11 @@ function Tickets() {
       if (search)         params.set("search",       search);
       if (statusFilter)   params.set("status",       statusFilter);
       if (priorityFilter) params.set("priority",     priorityFilter);
-      if (typeFilter)     params.set("type",          typeFilter);
+      // Repeated `type` query params produce an array filter on the server
+      // (ticketQuerySchema accepts string | string[] and normalises to string[]).
+      if (effectiveTypeFilter) {
+        for (const t of effectiveTypeFilter) params.append("type", t);
+      }
       if (assigneeFilter) params.set("assignedToId", assigneeFilter);
       if (clientFilter)   params.set("clientId",     clientFilter);
       if (dateFrom)       params.set("from",          dateFrom);
@@ -298,7 +357,7 @@ function Tickets() {
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: tickets,
-    columns,
+    columns: allColumns,
     state: { sorting, pagination },
     onSortingChange: (upd) => {
       setSorting(upd);
@@ -312,6 +371,7 @@ function Tickets() {
   });
 
   return (
+    <>
     <div className="px-4 sm:px-6 py-4 sm:py-8">
 
         {/* ── Page header ── */}
@@ -335,6 +395,30 @@ function Tickets() {
           <p className="mt-1 text-sm" style={{ color: "var(--rt-text-3)" }}>
             Manage and track all incoming support requests
           </p>
+        </div>
+
+        {/* ── Type tabs ── */}
+        <div className="flex flex-wrap items-center gap-2 mb-4" role="tablist" aria-label="Ticket type tabs">
+          {([
+            { value: "all",  label: "All"                     },
+            { value: "bug",  label: "Bugs & Support"          },
+            { value: "impl", label: "New Requirements" },
+          ] as { value: TabFilter; label: string }[]).map((t) => {
+            const active = tabFilter === t.value;
+            return (
+              <Button
+                key={t.value}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                variant={active ? "default" : "outline"}
+                size="sm"
+                onClick={() => { setTabFilter(t.value); setStatusFilter(""); }}
+              >
+                {t.label}
+              </Button>
+            );
+          })}
         </div>
 
         {/* ── Filter bar ── */}
@@ -377,39 +461,45 @@ function Tickets() {
               <SelectValue placeholder="All statuses" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all"              className="text-xs">All statuses</SelectItem>
-              <SelectItem value="UN_ASSIGNED"      className="text-xs">{STATUS_LABELS["UN_ASSIGNED"]}</SelectItem>
-              <SelectItem value="OPEN_NOT_STARTED" className="text-xs">{STATUS_LABELS["OPEN_NOT_STARTED"]}</SelectItem>
-              <SelectItem value="OPEN_IN_PROGRESS" className="text-xs">{STATUS_LABELS["OPEN_IN_PROGRESS"]}</SelectItem>
-              <SelectItem value="OPEN_QA"          className="text-xs">{STATUS_LABELS["OPEN_QA"]}</SelectItem>
-              <SelectItem value="OPEN_DONE"        className="text-xs">{STATUS_LABELS["OPEN_DONE"]}</SelectItem>
-              <SelectItem value="CLOSED"           className="text-xs">{STATUS_LABELS["CLOSED"]}</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {/* Category filter */}
-          <Select
-            value={typeFilter}
-            onValueChange={(v) => setTypeFilter((v as string) === "all" ? "" : (v as TicketTypeValue))}
-          >
-            <SelectTrigger
-              className="h-8 text-xs rounded-lg px-3 border w-full sm:w-[148px]"
-              style={{
-                background: "var(--rt-surface)",
-                border:     "1px solid var(--rt-border)",
-                color:      typeFilter ? "var(--rt-text-2)" : "var(--rt-text-3)",
-                boxShadow:  "none",
-              }}
-            >
-              <SelectValue placeholder="All categories" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all" className="text-xs">All categories</SelectItem>
-              {TICKET_TYPES.map((t) => (
-                <SelectItem key={t} value={t} className="text-xs">{CATEGORY_LABELS[t]}</SelectItem>
+              <SelectItem value="all" className="text-xs">All statuses</SelectItem>
+              {/* Filter status options by active tab so impl-only statuses
+                  don't appear on Bug & Support and vice versa. */}
+              {(tabFilter === "bug"
+                ? STATUSES.filter((s) => !["SUBMITTED", "ADMIN_REVIEW", "PLANNING", "CUSTOMER_APPROVAL", "APPROVED"].includes(s))
+                : tabFilter === "impl"
+                ? (["SUBMITTED", "ADMIN_REVIEW", "PLANNING", "CUSTOMER_APPROVAL", "APPROVED", "OPEN_IN_PROGRESS", "OPEN_DONE", "CLOSED"] as StatusValue[])
+                : STATUSES
+              ).map((s) => (
+                <SelectItem key={s} value={s} className="text-xs">{STATUS_LABELS[s]}</SelectItem>
               ))}
             </SelectContent>
           </Select>
+
+          {/* Category filter — hidden when a type tab is active to avoid contradictory filters */}
+          {tabFilter === "all" && (
+            <Select
+              value={typeFilter}
+              onValueChange={(v) => setTypeFilter((v as string) === "all" ? "" : (v as TicketTypeValue))}
+            >
+              <SelectTrigger
+                className="h-8 text-xs rounded-lg px-3 border w-full sm:w-[148px]"
+                style={{
+                  background: "var(--rt-surface)",
+                  border:     "1px solid var(--rt-border)",
+                  color:      typeFilter ? "var(--rt-text-2)" : "var(--rt-text-3)",
+                  boxShadow:  "none",
+                }}
+              >
+                <SelectValue placeholder="All categories" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="text-xs">All categories</SelectItem>
+                {TICKET_TYPES.map((t) => (
+                  <SelectItem key={t} value={t} className="text-xs">{CATEGORY_LABELS[t]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
 
           {/* Priority filter */}
           <Select
@@ -558,15 +648,108 @@ function Tickets() {
           </div>
         )}
 
-        {/* ── Table ── */}
+        {/* ── Mobile card list (< md) ── */}
         {!isError && (
-          <div className="rounded-xl overflow-x-auto" style={{ border: "1px solid var(--rt-border)" }}>
+          <div className="flex flex-col gap-2 md:hidden" aria-hidden="true">
+            {isLoading
+              ? Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="rounded-xl p-4 animate-pulse" style={{ background: "var(--rt-surface)", border: "1px solid var(--rt-border)" }}>
+                    <div className="h-3 rounded w-20 mb-3" style={{ background: "var(--rt-border)" }} />
+                    <div className="h-3 rounded w-48 mb-2" style={{ background: "var(--rt-border)" }} />
+                    <div className="h-3 rounded w-32" style={{ background: "var(--rt-border)" }} />
+                  </div>
+                ))
+              : tickets.length === 0
+              ? (
+                  <div className="py-16 text-center">
+                    <p className="text-sm" style={{ color: "var(--rt-text-3)" }}>
+                      {hasFilters ? "No tickets match your filters" : "No tickets yet"}
+                    </p>
+                    {hasFilters && (
+                      <button onClick={clearFilters} className="text-xs mt-2" style={{ color: "var(--rt-accent)" }}>
+                        Clear filters
+                      </button>
+                    )}
+                  </div>
+                )
+              : tickets.map((ticket) => {
+                  const sc = STATUS_CONFIG[ticket.status] ?? STATUS_CONFIG.CLOSED;
+                  const pc = PRIORITY_CONFIG[ticket.priority] ?? PRIORITY_CONFIG.LOW;
+                  return (
+                    <Link
+                      key={ticket.id}
+                      to={`/tickets/${ticket.ticketId}`}
+                      style={{ textDecoration: "none" }}
+                    >
+                      <div
+                        className="rounded-xl p-4 transition-colors"
+                        style={{ background: "var(--rt-surface)", border: "1px solid var(--rt-border)" }}
+                        onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = "var(--rt-surface-2)")}
+                        onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = "var(--rt-surface)")}
+                      >
+                        {/* Row 1: ID + Status */}
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-mono text-xs font-semibold" style={{ color: "var(--rt-accent)" }}>
+                            {ticket.ticketId}
+                          </span>
+                          <span
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold"
+                            style={{ background: sc.bg, color: sc.text }}
+                          >
+                            <span className="h-1.5 w-1.5 rounded-full" style={{ background: sc.dot }} />
+                            {STATUS_LABELS[ticket.status]}
+                          </span>
+                        </div>
+                        {/* Row 2: Subject */}
+                        <p className="text-sm font-semibold mb-2 line-clamp-1" style={{ color: "var(--rt-text-1)" }}>
+                          {ticket.title}
+                        </p>
+                        {/* Row 3: Sender */}
+                        <div className="flex items-center gap-1 mb-3">
+                          <p className="text-xs font-medium" style={{ color: "var(--rt-text-2)" }}>
+                            {ticket.senderName ?? ticket.createdBy?.name}
+                          </p>
+                          <span className="text-xs" style={{ color: "var(--rt-text-3)" }}>·</span>
+                          <p className="text-xs truncate" style={{ color: "var(--rt-text-3)" }}>
+                            {ticket.senderEmail ?? ticket.project}
+                          </p>
+                        </div>
+                        {/* Row 4: Priority + Category + Date */}
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <span className="text-xs font-bold uppercase tracking-wider" style={{ color: pc.textLight }}>
+                            {PRIORITY_LABELS[ticket.priority]}
+                          </span>
+                          {CATEGORY_CLASS[ticket.type] ? (
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded border text-xs font-medium ${CATEGORY_CLASS[ticket.type]}`}
+                            >
+                              {CATEGORY_LABELS[ticket.type]}
+                            </span>
+                          ) : (
+                            <span className="text-xs" style={{ color: "var(--rt-text-3)" }}>
+                              {CATEGORY_LABELS[ticket.type]}
+                            </span>
+                          )}
+                          <span className="text-xs font-mono ml-auto" style={{ color: "var(--rt-text-3)" }}>
+                            {new Date(ticket.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                          </span>
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })}
+          </div>
+        )}
+
+        {/* ── Table (md+) ── */}
+        {!isError && (
+          <div className="hidden md:block rounded-xl overflow-x-auto" style={{ border: "1px solid var(--rt-border)" }}>
             <table className="w-full min-w-[700px]" style={{ borderCollapse: "collapse", background: "var(--rt-surface)" }}>
               <thead>
                 {table.getHeaderGroups().map((hg) => (
                   <tr
                     key={hg.id}
-                    style={{ borderBottom: "1px solid var(--rt-border)", background: "#f9fafb" }}
+                    style={{ borderBottom: "1px solid var(--rt-border)", background: "var(--rt-surface-2)" }}
                   >
                     {hg.headers.map((header) => {
                       const canSort = header.column.getCanSort();
@@ -591,7 +774,7 @@ function Tickets() {
               <tbody>
                 {isLoading ? (
                   Array.from({ length: 8 }).map((_, i) => (
-                    <SkeletonRow key={i} colCount={columns.length} />
+                    <SkeletonRow key={i} colCount={columns.length + 1} />
                   ))
                 ) : table.getRowModel().rows.length === 0 ? (
                   <tr>
@@ -623,9 +806,10 @@ function Tickets() {
                     return (
                       <tr
                         key={row.id}
-                        style={{ borderBottom: "1px solid var(--rt-border)", transition: "background 0.1s" }}
+                        style={{ borderBottom: "1px solid var(--rt-border)", transition: "background 0.1s", cursor: "pointer" }}
+                        onClick={() => navigate(`/tickets/${row.original.ticketId}`)}
                         onMouseEnter={(e) =>
-                          ((e.currentTarget as HTMLElement).style.background = "#fff9f6")
+                          ((e.currentTarget as HTMLElement).style.background = "var(--rt-surface-2)")
                         }
                         onMouseLeave={(e) =>
                           ((e.currentTarget as HTMLElement).style.background = "transparent")
@@ -647,77 +831,36 @@ function Tickets() {
 
         {/* ── Pagination ── */}
         {!isLoading && !isError && (
-          <div className="flex items-center justify-between mt-5">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-5">
             <div className="flex items-center gap-3">
-              <span className="text-sm" style={{ color: "var(--rt-text-3)" }}>Rows per page</span>
+              <span className="text-xs text-muted-foreground">Rows per page</span>
               <select
                 value={pagination.pageSize}
                 onChange={(e) => setPagination({ pageIndex: 0, pageSize: Number(e.target.value) })}
-                className="text-sm outline-none rounded-md px-2 py-1 cursor-pointer"
-                style={{
-                  background: "var(--rt-surface-2)",
-                  border:     "1px solid var(--rt-border-2)",
-                  color:      "var(--rt-text-2)",
-                }}
+                className="text-xs outline-none rounded-md px-2 py-1 cursor-pointer border"
               >
                 {[10, 20, 50].map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
             </div>
-
             <div className="flex items-center gap-3">
-              <span className="text-sm font-mono" style={{ color: "var(--rt-text-3)" }}>
-                {pagination.pageIndex + 1} / {totalPages || 1}
+              <span className="text-xs text-muted-foreground">
+                {total} tickets · page {pagination.pageIndex + 1} of {totalPages || 1}
               </span>
               <div className="flex gap-1">
-                <button
-                  onClick={() => table.previousPage()}
-                  disabled={!table.getCanPreviousPage()}
-                  className="flex items-center gap-1 px-3 py-2.5 sm:py-1.5 text-xs rounded-lg disabled:opacity-25 disabled:cursor-not-allowed transition-all duration-150"
-                  style={{
-                    background: "var(--rt-surface-2)",
-                    border:     "1px solid var(--rt-border-2)",
-                    color:      "var(--rt-text-2)",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!table.getCanPreviousPage()) return;
-                    (e.currentTarget as HTMLElement).style.borderColor = "var(--rt-accent)";
-                    (e.currentTarget as HTMLElement).style.color       = "var(--rt-accent)";
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLElement).style.borderColor = "var(--rt-border-2)";
-                    (e.currentTarget as HTMLElement).style.color       = "var(--rt-text-2)";
-                  }}
-                >
-                  <ChevronLeft className="h-3.5 w-3.5" />
+                <Button variant="outline" size="sm" disabled={!table.getCanPreviousPage()} onClick={() => table.previousPage()}>
                   Previous
-                </button>
-                <button
-                  onClick={() => table.nextPage()}
-                  disabled={!table.getCanNextPage()}
-                  className="flex items-center gap-1 px-3 py-2.5 sm:py-1.5 text-xs rounded-lg disabled:opacity-25 disabled:cursor-not-allowed transition-all duration-150"
-                  style={{
-                    background: "var(--rt-surface-2)",
-                    border:     "1px solid var(--rt-border-2)",
-                    color:      "var(--rt-text-2)",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!table.getCanNextPage()) return;
-                    (e.currentTarget as HTMLElement).style.borderColor = "var(--rt-accent)";
-                    (e.currentTarget as HTMLElement).style.color       = "var(--rt-accent)";
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLElement).style.borderColor = "var(--rt-border-2)";
-                    (e.currentTarget as HTMLElement).style.color       = "var(--rt-text-2)";
-                  }}
-                >
+                </Button>
+                <Button variant="outline" size="sm" disabled={!table.getCanNextPage()} onClick={() => table.nextPage()}>
                   Next
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </button>
+                </Button>
               </div>
             </div>
           </div>
         )}
     </div>
+
+    <TicketSlidePanel ticket={selectedTicket} onClose={closePanel} />
+    </>
   );
 }
 

@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
 import { useSession, signOut } from "@/lib/auth-client";
-import { LogOut, Inbox, UserRound, Menu, LayoutDashboard, Sun, Moon } from "lucide-react";
-import { useTheme } from "@/contexts/ThemeContext";
+import { LogOut, Inbox, UserRound, Menu, LayoutDashboard } from "lucide-react";
 
 const NAV_ITEMS = [
   { path: "/portal/dashboard", label: "Dashboard",  icon: LayoutDashboard },
@@ -13,9 +12,6 @@ export default function PortalLayout() {
   const { data: session } = useSession();
   const location  = useLocation();
   const navigate  = useNavigate();
-  const { theme, toggleTheme } = useTheme();
-  const isDark = theme === "dark";
-
   const userName =
     (session?.user as unknown as { name?: string } | undefined)?.name ?? "Customer";
 
@@ -37,7 +33,7 @@ export default function PortalLayout() {
       {/* ── Top navbar ── */}
       <header
         style={{
-          background:   "var(--rt-accent)",
+          background:   "linear-gradient(135deg, #0a0000 0%, #660000 35%, #990000 70%, #cc0000 100%)",
           borderBottom: "none",
           position:     "sticky",
           top:          0,
@@ -73,18 +69,6 @@ export default function PortalLayout() {
 
           {/* Right side */}
           <div className="flex items-center gap-2">
-            {/* Theme toggle */}
-            <button
-              onClick={toggleTheme}
-              className="flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200"
-              title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-              style={{ background: "rgba(0,0,0,0.12)", border: "1px solid rgba(255,255,255,0.2)", color: "#ffffff" }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(0,0,0,0.22)"; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(0,0,0,0.12)"; }}
-            >
-              {isDark ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
-            </button>
-
             {/* Divider */}
             <div style={{ width: "1px", height: "20px", background: "rgba(255,255,255,0.25)" }} />
 
@@ -141,8 +125,9 @@ export default function PortalLayout() {
           style={{
             width:         "220px",
             flexShrink:    0,
-            background:    "var(--rt-surface)",
-            borderRight:   "1px solid var(--rt-border)",
+            background:    "#ffffff",
+            borderRight:   "1px solid #e4e7f0",
+            boxShadow:     "2px 0 16px rgba(99,102,241,0.06)",
             padding:       "12px 10px",
             display:       "flex",
             flexDirection: "column",
@@ -165,20 +150,22 @@ export default function PortalLayout() {
                   textDecoration: "none",
                   fontWeight:     active ? 600 : 500,
                   fontSize:       "14px",
-                  color:          active ? "#ffffff" : "var(--rt-text-2)",
-                  background:     active ? "var(--rt-accent)" : "transparent",
+                  color:          active ? "#990000" : "#4a0a0a",
+                  background:     active ? "rgba(204,0,0,0.08)" : "transparent",
+                  borderLeft:     active ? "3px solid #ca8a04" : "3px solid transparent",
+                  paddingLeft:    "9px",
                   transition:     "background 0.15s, color 0.15s",
                 }}
                 onMouseEnter={(e) => {
                   if (!active) {
-                    (e.currentTarget as HTMLElement).style.background = "var(--rt-accent-bg)";
-                    (e.currentTarget as HTMLElement).style.color      = "var(--rt-accent)";
+                    (e.currentTarget as HTMLElement).style.background = "rgba(204,0,0,0.05)";
+                    (e.currentTarget as HTMLElement).style.color      = "#990000";
                   }
                 }}
                 onMouseLeave={(e) => {
                   if (!active) {
                     (e.currentTarget as HTMLElement).style.background = "transparent";
-                    (e.currentTarget as HTMLElement).style.color      = "var(--rt-text-2)";
+                    (e.currentTarget as HTMLElement).style.color      = "#4a0a0a";
                   }
                 }}
               >
@@ -193,7 +180,7 @@ export default function PortalLayout() {
         <main
           style={{
             flex:      1,
-            background: "var(--rt-bg)",
+            background: "#fff9f9",
             overflowY: "auto",
             minWidth:  0,
           }}

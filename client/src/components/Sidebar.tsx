@@ -40,11 +40,12 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
         open ? "translate-x-0" : "-translate-x-full md:translate-x-0",
       ].join(" ")}
       style={{
-        width:          "220px",
+        width:          "240px",
         flexShrink:     0,
-        background:     "var(--rt-surface)",
-        borderRight:    "1px solid var(--rt-border)",
-        padding:        "12px 10px",
+        background:     "#ffffff",
+        borderRight:    "1px solid #ffd0d0",
+        boxShadow:      "2px 0 16px rgba(204,0,0,0.08)",
+        padding:        "16px 12px",
         display:        "flex",
         flexDirection:  "column",
         gap:            "2px",
@@ -62,28 +63,30 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
               alignItems:     "center",
               gap:            "10px",
               padding:        "9px 12px",
+              paddingLeft:    "9px",
               borderRadius:   "8px",
               textDecoration: "none",
-              fontWeight:     active ? 600 : 500,
+              fontWeight:     active ? 700 : 500,
               fontSize:       "14px",
-              color:          active ? "#ffffff" : "var(--rt-text-2)",
-              background:     active ? "var(--rt-accent)" : "transparent",
+              color:          active ? "#990000" : "#4a0a0a",
+              background:     active ? "rgba(204,0,0,0.08)" : "transparent",
+              borderLeft:     active ? "3px solid #ca8a04" : "3px solid transparent",
               transition:     "background 0.15s, color 0.15s",
             }}
             onMouseEnter={(e) => {
               if (!active) {
-                (e.currentTarget as HTMLElement).style.background = "var(--rt-accent-bg)";
-                (e.currentTarget as HTMLElement).style.color      = "var(--rt-accent)";
+                (e.currentTarget as HTMLElement).style.background = "rgba(204,0,0,0.05)";
+                (e.currentTarget as HTMLElement).style.color      = "#990000";
               }
             }}
             onMouseLeave={(e) => {
               if (!active) {
                 (e.currentTarget as HTMLElement).style.background = "transparent";
-                (e.currentTarget as HTMLElement).style.color      = "var(--rt-text-2)";
+                (e.currentTarget as HTMLElement).style.color      = "#4a0a0a";
               }
             }}
           >
-            <Icon size={18} style={{ flexShrink: 0 }} />
+            <Icon size={18} style={{ flexShrink: 0, color: active ? "#ca8a04" : "#9ca3af" }} />
             {label}
           </Link>
         );

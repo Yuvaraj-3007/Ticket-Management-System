@@ -27,6 +27,18 @@ import { processImapEmail } from "./routes/webhooks.js";
 
 dotenv.config();
 
+// Fail fast if the auth secret is missing — without it Better Auth generates a
+// random secret each restart, invalidating every user session on restart.
+if (!process.env.BETTER_AUTH_SECRET) {
+  console.error(
+    "[FATAL] BETTER_AUTH_SECRET is not set. All user sessions will be invalidated on every restart. " +
+    "Set a stable random string (e.g. openssl rand -base64 32) in your .env file."
+  );
+  if (process.env.NODE_ENV === "production") {
+    process.exit(1);
+  }
+}
+
 Sentry.init({
   dsn: process.env.SENTRY_DSN,
   enabled: !!process.env.SENTRY_DSN,
@@ -45,6 +57,20 @@ Sentry.init({
 if (process.env.NODE_ENV === "production" && !process.env.SENTRY_DSN) {
   console.warn("WARNING: SENTRY_DSN is not set — error reporting to Sentry is disabled.");
 }
+
+// Prevent pg / pg-boss connection drops from crashing the entire process.
+// pg.Pool emits 'error' events on dropped connections; if nothing catches
+// them they become uncaughtExceptions and kill the server (→ Nginx 502).
+// pg-boss has built-in reconnect logic, so we log + report and stay alive.
+process.on("uncaughtException", (err) => {
+  console.error("[process] uncaughtException (survived):", err.message);
+  Sentry.captureException(err);
+});
+process.on("unhandledRejection", (reason) => {
+  const err = reason instanceof Error ? reason : new Error(String(reason));
+  console.error("[process] unhandledRejection (survived):", err.message);
+  Sentry.captureException(err);
+});
 
 // Guard: refuse to start in production without a webhook secret
 if (process.env.NODE_ENV === "production" && !process.env.WEBHOOK_SECRET) {
@@ -79,7 +105,7 @@ if (!isGmailApiConfigured()) {
 }
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3000;
 
 // Trust one proxy hop so req.ip reflects the real client IP (not proxy IP)
 app.set("trust proxy", 1);
@@ -112,11 +138,20 @@ app.use(express.urlencoded({ extended: true, limit: "50kb" }));
 // Serve uploaded attachments as static files
 // Force download + nosniff to prevent stored XSS via HTML/SVG files rendered inline
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-app.use("/uploads", (_req, res, next) => {
-  res.setHeader("Content-Disposition", "attachment");
-  res.setHeader("X-Content-Type-Options", "nosniff");
-  next();
-}, express.static(path.resolve(__dirname, "../../uploads")));
+// `setHeaders` runs after express.static resolves the MIME type, so we can
+// override the `application/octet-stream` fallback that mime-db returns for
+// non-standard JPEG aliases (.jfif from Google Images, .jpe). Without this,
+// `nosniff` prevents browsers from rendering them inside <img>.
+app.use("/uploads", express.static(path.resolve(__dirname, "../uploads"), {
+  setHeaders(res, filePath) {
+    res.setHeader("Content-Disposition", "attachment");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    const ext = path.extname(filePath).toLowerCase();
+    if (ext === ".jfif" || ext === ".jpe") {
+      res.setHeader("Content-Type", "image/jpeg");
+    }
+  },
+}));
 
 // General API rate limit — applied in all environments (stricter in production)
 const isProd = process.env.NODE_ENV === "production";
@@ -180,12 +215,29 @@ if (process.env.NODE_ENV !== "test") {
     console.error("[boss] error:", err);
     Sentry.captureException(err, { tags: { source: "pg-boss" } });
   });
-  boss.start()
-    .then(() => Promise.all([registerClassifyWorker(), registerAutoResolveWorker(), registerSyncHrmsWorker()]))
-    .then(() => boss.schedule(SYNC_HRMS_QUEUE, "0 2 * * *", {}))
-    .then(() => watchInbox())
-    .then(() => console.log("[boss] Workers registered"))
-    .catch((err) => console.error("[boss] Failed to start:", err));
+
+  // Retry pg-boss startup up to 5 times with a 10 s delay between attempts.
+  // On a fresh deploy, the DB connection pool can be momentarily saturated by
+  // migration + seed connections, causing ECONNREFUSED for the first connect.
+  async function startBossWithRetry(attemptsLeft = 5): Promise<void> {
+    try {
+      await boss.start();
+      await Promise.all([registerClassifyWorker(), registerAutoResolveWorker(), registerSyncHrmsWorker()]);
+      await boss.schedule(SYNC_HRMS_QUEUE, "0 2 * * *", {});
+      await watchInbox();
+      console.log("[boss] Workers registered");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (attemptsLeft > 1) {
+        console.warn(`[boss] Startup failed (${msg}), retrying in 10 s… (${attemptsLeft - 1} attempts left)`);
+        await new Promise((r) => setTimeout(r, 10_000));
+        return startBossWithRetry(attemptsLeft - 1);
+      }
+      console.error("[boss] Failed to start after all retries:", msg);
+      Sentry.captureException(err, { tags: { source: "pg-boss-startup" } });
+    }
+  }
+  startBossWithRetry();
 
   /* === IMAP startup (commented out — re-enable when IMAP Basic Auth is allowed in M365) ===
   async function startImapWithRetry() {
@@ -212,6 +264,9 @@ if (!process.env.WEBHOOK_SECRET) {
 
 server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`[config] BETTER_AUTH_URL : ${process.env.BETTER_AUTH_URL ?? "(not set — sessions will break in production)"}`);
+  console.log(`[config] CLIENT_URL      : ${process.env.CLIENT_URL      ?? "(not set — CORS uses localhost default)"}`);
+  console.log(`[config] NODE_ENV        : ${process.env.NODE_ENV        ?? "development"}`);
 });
 
 export default app;
