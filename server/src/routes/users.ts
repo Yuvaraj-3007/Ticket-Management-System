@@ -14,16 +14,41 @@ const router = Router();
 router.use(requireAdmin);
 
 // GET /api/users — list all users (TMS accounts + HRMS employees merged)
-// HRMS employees without TMS accounts are auto-provisioned as Agents on first load.
+// HRMS employees without a TMS account appear as `source: "HRMS"` rows; the UI
+// can prompt the admin to "Add to System" which provisions a real TMS account.
 router.get("/", async (_req: Request, res: Response) => {
   try {
-    const users = await prisma.user.findMany({
-      where: { role: { in: [ROLES.ADMIN, ROLES.AGENT] } },
-      select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true },
-      orderBy: { createdAt: "desc" },
-    });
+    const [tmsUsers, hrmsEmployees] = await Promise.all([
+      prisma.user.findMany({
+        where:   { role: { in: [ROLES.ADMIN, ROLES.AGENT] } },
+        select:  { id: true, name: true, email: true, role: true, isActive: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+      }),
+      // Live fetch from HRMS-POC; returns [] if HRMS unconfigured
+      getEmployeeDirectory().catch(() => []),
+    ]);
 
-    res.json(users.map((u) => ({ ...u, createdAt: u.createdAt.toISOString(), source: "TMS" as const })));
+    const tmsEmailSet = new Set(tmsUsers.map((u) => u.email.toLowerCase()));
+    const tmsRows = tmsUsers.map((u) => ({
+      ...u,
+      createdAt: u.createdAt.toISOString(),
+      source:    "TMS" as const,
+    }));
+
+    // HRMS employees that don't yet have a TMS account
+    const hrmsRows = hrmsEmployees
+      .filter((e) => e.email && e.name && !tmsEmailSet.has(e.email.toLowerCase()))
+      .map((e) => ({
+        id:        e.id,
+        name:      e.name,
+        email:     e.email,
+        role:      ROLES.AGENT, // default role until provisioned
+        isActive:  true,
+        createdAt: new Date(0).toISOString(), // sentinel — HRMS doesn't expose joining date here
+        source:    "HRMS" as const,
+      }));
+
+    res.json([...tmsRows, ...hrmsRows]);
   } catch {
     res.status(500).json({ error: "Failed to fetch users" });
   }

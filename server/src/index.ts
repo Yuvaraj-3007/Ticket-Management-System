@@ -138,11 +138,20 @@ app.use(express.urlencoded({ extended: true, limit: "50kb" }));
 // Serve uploaded attachments as static files
 // Force download + nosniff to prevent stored XSS via HTML/SVG files rendered inline
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-app.use("/uploads", (_req, res, next) => {
-  res.setHeader("Content-Disposition", "attachment");
-  res.setHeader("X-Content-Type-Options", "nosniff");
-  next();
-}, express.static(path.resolve(__dirname, "../uploads")));
+// `setHeaders` runs after express.static resolves the MIME type, so we can
+// override the `application/octet-stream` fallback that mime-db returns for
+// non-standard JPEG aliases (.jfif from Google Images, .jpe). Without this,
+// `nosniff` prevents browsers from rendering them inside <img>.
+app.use("/uploads", express.static(path.resolve(__dirname, "../uploads"), {
+  setHeaders(res, filePath) {
+    res.setHeader("Content-Disposition", "attachment");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    const ext = path.extname(filePath).toLowerCase();
+    if (ext === ".jfif" || ext === ".jpe") {
+      res.setHeader("Content-Type", "image/jpeg");
+    }
+  },
+}));
 
 // General API rate limit — applied in all environments (stricter in production)
 const isProd = process.env.NODE_ENV === "production";

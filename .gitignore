@@ -60,3 +60,6 @@ client/client_out.txt
 
 # Uploaded files (local disk storage)
 uploads/
+
+# Local screenshots shared with Claude
+screenshots/

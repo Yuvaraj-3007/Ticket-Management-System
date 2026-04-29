@@ -11,6 +11,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ImageUploadField } from "@/components/portal/ImageUploadField";
 import { statusVariant, STATUS_LABELS } from "@/lib/ticket-badges";
+import { ImplementationStatusPanel, type ImplementationRequestData } from "@/components/ImplementationStatusPanel";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,6 +42,7 @@ type PortalTicket = {
   ratingText?:     string | null;
   assignedTo:      { name: string } | null;
   attachments:     Attachment[];
+  implementationRequest?: ImplementationRequestData | null;
 };
 
 type PortalComment = {
@@ -357,6 +359,15 @@ export default function PortalTicketDetail() {
               })()}
             </DetailRow>
           </div>
+
+          {/* Implementation request workflow panel — customer side */}
+          {ticket.type === "IMPLEMENTATION" && ticket.implementationRequest && (
+            <ImplementationStatusPanel
+              ticketId={ticket.ticketId}
+              status={ticket.status}
+              implementationRequest={ticket.implementationRequest}
+            />
+          )}
 
           {/* Description */}
           <div>

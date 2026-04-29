@@ -1,3 +1,4 @@
+import { useState } from "react";
 import axios from "axios";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
@@ -27,14 +28,16 @@ interface OpenTicket {
 }
 
 interface DashboardData {
-  total:           number;
-  open:            number;
-  unAssigned:      number;
-  closed:          number;
-  statusBreakdown: StatusBreakdown;
-  openTickets:     OpenTicket[];
-  daily:           Array<{ day: number; count: number }>;
-  recent:          Array<{ id: string; ticketId: string; title: string; status: string; createdAt: string }>;
+  total:                number;
+  open:                 number;
+  unAssigned:           number;
+  closed:               number;
+  statusBreakdown:      StatusBreakdown;
+  openTickets:          OpenTicket[];
+  daily:                Array<{ day: number; count: number }>;
+  recent:               Array<{ id: string; ticketId: string; title: string; status: string; createdAt: string }>;
+  newRequirementsTotal: number;
+  bugSupportTotal:      number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -113,11 +116,29 @@ function StatusBar({ label, count, total, color }: { label: string; count: numbe
 
 // ─── Main component ────────────────────────────────────────────────────────────
 
+/** Build current month + previous 11 months as YYYY-MM picker options. */
+function buildPortalMonthOptions(): { value: string; label: string }[] {
+  const opts: { value: string; label: string }[] = [];
+  const now = new Date();
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+    const value = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+    const label = d.toLocaleDateString(undefined, { year: "numeric", month: "long" });
+    opts.push({ value, label });
+  }
+  return opts;
+}
+
 export default function PortalDashboard() {
+  const monthOptions = buildPortalMonthOptions();
+  // Default = current month (first option)
+  const [month, setMonth] = useState<string>(monthOptions[0]?.value ?? "");
+
   const { data, isLoading, isError } = useQuery<DashboardData>({
-    queryKey: ["portal-dashboard", "v3"],
+    queryKey: ["portal-dashboard", "v3", month],
     queryFn:  async () => {
-      const res = await axios.get("/api/portal/dashboard", { withCredentials: true });
+      const url = month ? `/api/portal/dashboard?month=${month}` : "/api/portal/dashboard";
+      const res = await axios.get(url, { withCredentials: true });
       return res.data;
     },
     staleTime: 30_000,
@@ -126,25 +147,42 @@ export default function PortalDashboard() {
   const sb    = data?.statusBreakdown;
   const total = data?.total ?? 0;
 
-  // Build daily bar chart — fill all days of current month
-  const now        = new Date();
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  const dailyMap   = Object.fromEntries((data?.daily ?? []).map((d) => [d.day, d.count]));
-  const barData    = Array.from({ length: now.getDate() }, (_, i) => ({
+  // Build daily bar chart — fill all days of the selected month
+  const [selectedYear, selectedMonth] = month
+    ? month.split("-").map(Number)
+    : [new Date().getFullYear(), new Date().getMonth() + 1];
+  const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
+  const dailyMap    = Object.fromEntries((data?.daily ?? []).map((d) => [d.day, d.count]));
+  const barData     = Array.from({ length: daysInMonth }, (_, i) => ({
     day:   i + 1,
     count: dailyMap[i + 1] ?? 0,
   }));
-  const hasBarData = barData.some((d) => d.count > 0);
+  const hasBarData  = barData.some((d) => d.count > 0);
 
   return (
     <div className="px-4 sm:px-6 py-6 sm:py-8 space-y-8 max-w-7xl mx-auto">
 
-      {/* Page title */}
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Dashboard</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {now.toLocaleString("default", { month: "long", year: "numeric" })} overview of your support tickets
-        </p>
+      {/* Page title + month picker */}
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Dashboard</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {monthOptions.find((o) => o.value === month)?.label ?? "All time"} overview of your support tickets
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <label htmlFor="portal-month-filter" className="text-xs font-medium text-muted-foreground">Month:</label>
+          <select
+            id="portal-month-filter"
+            value={month}
+            onChange={(e) => setMonth(e.target.value)}
+            className="h-8 text-xs rounded-md px-2 border bg-background border-border"
+          >
+            {monthOptions.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {isError && (
@@ -154,11 +192,13 @@ export default function PortalDashboard() {
       )}
 
       {/* ── Stat cards ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <SummaryCard label="Total Tickets"     value={total}              accent  loading={isLoading} />
-        <SummaryCard label="Awaiting Support"  value={data?.unAssigned ?? 0}      loading={isLoading} />
-        <SummaryCard label="In Progress"       value={data?.open       ?? 0}      loading={isLoading} />
-        <SummaryCard label="Resolved"          value={data?.closed     ?? 0}      loading={isLoading} />
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+        <SummaryCard label="Total Tickets"      value={total}                          accent loading={isLoading} />
+        <SummaryCard label="Bugs & Support"     value={data?.bugSupportTotal      ?? 0}        loading={isLoading} />
+        <SummaryCard label="New Requirements"   value={data?.newRequirementsTotal ?? 0}        loading={isLoading} />
+        <SummaryCard label="Awaiting Support"   value={data?.unAssigned           ?? 0}        loading={isLoading} />
+        <SummaryCard label="In Progress"        value={data?.open                 ?? 0}        loading={isLoading} />
+        <SummaryCard label="Resolved"           value={data?.closed               ?? 0}        loading={isLoading} />
       </div>
 
       {/* ── Main content row ── */}
@@ -241,7 +281,7 @@ export default function PortalDashboard() {
 
       {/* ── This month activity chart ── */}
       <div className="bg-white border border-gray-200 rounded-xl p-6">
-        <SectionHeader title={`Tickets Submitted — ${now.toLocaleString("default", { month: "long", year: "numeric" })}`} />
+        <SectionHeader title={`Tickets Submitted — ${monthOptions.find((o) => o.value === month)?.label ?? "All time"}`} />
         {isLoading ? (
           <Skeleton className="h-40 w-full" />
         ) : !hasBarData ? (

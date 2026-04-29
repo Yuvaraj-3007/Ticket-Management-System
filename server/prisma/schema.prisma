@@ -92,6 +92,7 @@ enum TicketType {
   TASK
   SUPPORT
   EXPLANATION
+  IMPLEMENTATION
 }
 
 enum Priority {
@@ -109,6 +110,11 @@ enum Status {
   OPEN_DONE
   WAITING_FOR_CLIENT
   CLOSED
+  SUBMITTED
+  ADMIN_REVIEW
+  PLANNING
+  CUSTOMER_APPROVAL
+  APPROVED
 }
 
 model Ticket {
@@ -119,6 +125,8 @@ model Ticket {
   type        TicketType
   priority    Priority   @default(MEDIUM)
   status      Status     @default(UN_ASSIGNED)
+  estimatedHours Decimal? @db.Decimal(6, 2)
+  actualHours    Decimal? @db.Decimal(6, 2)
   project     String
   senderName     String?
   senderEmail    String?
@@ -141,6 +149,7 @@ model Ticket {
   attachments Attachment[]
   comments    Comment[]
   history     TicketHistory[]
+  implementationRequest ImplementationRequest?
 
   @@map("tickets")
 }
@@ -213,4 +222,23 @@ model TicketHistory {
   createdAt DateTime @default(now())
 
   @@map("ticket_history")
+}
+
+model ImplementationRequest {
+  id                       String   @id @default(cuid())
+  ticket                   Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  ticketId                 String   @unique
+  businessGoal             String
+  currentPain              String
+  expectedOutcome          String
+  targetDate               DateTime?
+  planContent              String?
+  planPostedAt             DateTime?
+  customerApprovedAt       DateTime?
+  customerRejectedAt       DateTime?
+  customerRejectionReason  String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  @@map("implementation_requests")
 }

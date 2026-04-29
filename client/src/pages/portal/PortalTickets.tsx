@@ -10,6 +10,7 @@ import { useSession } from "@/lib/auth-client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ImageUploadField } from "@/components/portal/ImageUploadField";
 import { Search, LayoutList, LayoutGrid, ArrowUpDown, SlidersHorizontal, X, Plus } from "lucide-react";
+import { TICKET_TYPE, type TicketTypeValue } from "@tms/core";
 
 interface HrmsProject {
   id:          string;
@@ -25,10 +26,22 @@ type PortalTicket = {
   title:     string;
   status:    string;
   priority:  string;
+  type?:     TicketTypeValue;
   createdAt: string;
   updatedAt: string;
   rating:    number | null;
 };
+
+// Tab filter buckets — drives the type[] sent to GET /api/portal/tickets
+type TabFilter = "all" | "bug" | "impl";
+const BUG_TYPES: readonly TicketTypeValue[] = [
+  TICKET_TYPE.BUG,
+  TICKET_TYPE.REQUIREMENT,
+  TICKET_TYPE.TASK,
+  TICKET_TYPE.SUPPORT,
+  TICKET_TYPE.EXPLANATION,
+];
+const IMPL_TYPES: readonly TicketTypeValue[] = [TICKET_TYPE.IMPLEMENTATION];
 
 interface TicketsResponse {
   data:       PortalTicket[];
@@ -38,14 +51,17 @@ interface TicketsResponse {
   totalPages: number;
 }
 
-type StatusFilter   = "" | "UN_ASSIGNED" | "OPEN_NOT_STARTED" | "OPEN_IN_PROGRESS" | "OPEN_QA" | "OPEN_DONE" | "WAITING_FOR_CLIENT" | "CLOSED";
+type StatusFilter   = "" | "UN_ASSIGNED" | "OPEN_NOT_STARTED" | "OPEN_IN_PROGRESS" | "OPEN_QA" | "OPEN_DONE" | "WAITING_FOR_CLIENT" | "CLOSED" | "SUBMITTED" | "ADMIN_REVIEW" | "PLANNING" | "CUSTOMER_APPROVAL" | "APPROVED";
 type PriorityFilter = "" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 type SortOrder      = "desc" | "asc";
 type ViewMode       = "list" | "grid";
 
 // ─── Status / Priority config ─────────────────────────────────────────────────
 
-const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
+type StatusOption = { value: StatusFilter; label: string };
+
+// Statuses that only apply to bug/support tickets
+const BUG_STATUS_OPTIONS: StatusOption[] = [
   { value: "",                    label: "All"               },
   { value: "UN_ASSIGNED",         label: "Un-Assigned"       },
   { value: "OPEN_NOT_STARTED",    label: "Not Started"       },
@@ -56,6 +72,28 @@ const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: "CLOSED",              label: "Closed"            },
 ];
 
+// Statuses that only apply to implementation tickets
+const IMPL_STATUS_OPTIONS: StatusOption[] = [
+  { value: "",                    label: "All"               },
+  { value: "SUBMITTED",           label: "Submitted"         },
+  { value: "ADMIN_REVIEW",        label: "In Review"         },
+  { value: "PLANNING",            label: "Planning"          },
+  { value: "CUSTOMER_APPROVAL",   label: "Awaiting Approval" },
+  { value: "APPROVED",            label: "Approved"          },
+  { value: "OPEN_IN_PROGRESS",    label: "In Progress"       },
+  { value: "OPEN_DONE",           label: "Done"              },
+  { value: "CLOSED",              label: "Closed"            },
+];
+
+// Combined for the "All" tab (deduped)
+const ALL_STATUS_OPTIONS: StatusOption[] = [
+  { value: "",                    label: "All"               },
+  ...BUG_STATUS_OPTIONS.slice(1),
+  ...IMPL_STATUS_OPTIONS.slice(1).filter((opt) => !BUG_STATUS_OPTIONS.some((b) => b.value === opt.value)),
+];
+
+const STATUS_OPTIONS = ALL_STATUS_OPTIONS; // legacy alias used by statusLabel()
+
 const STATUS_STYLE: Record<string, { bg: string; text: string; dot: string }> = {
   UN_ASSIGNED:       { bg: "bg-gray-100",   text: "text-gray-600",   dot: "bg-gray-400"   },
   OPEN_NOT_STARTED:  { bg: "bg-amber-50",   text: "text-amber-700",  dot: "bg-amber-400"  },
@@ -64,6 +102,11 @@ const STATUS_STYLE: Record<string, { bg: string; text: string; dot: string }> = 
   OPEN_DONE:         { bg: "bg-teal-50",    text: "text-teal-700",   dot: "bg-teal-500"   },
   WAITING_FOR_CLIENT:{ bg: "bg-orange-50",  text: "text-orange-700", dot: "bg-orange-500" },
   CLOSED:            { bg: "bg-green-50",   text: "text-green-700",  dot: "bg-green-500"  },
+  SUBMITTED:         { bg: "bg-slate-50",   text: "text-slate-700",  dot: "bg-slate-400"  },
+  ADMIN_REVIEW:      { bg: "bg-blue-50",    text: "text-blue-800",   dot: "bg-blue-600"   },
+  PLANNING:          { bg: "bg-amber-50",   text: "text-amber-800",  dot: "bg-amber-500"  },
+  CUSTOMER_APPROVAL: { bg: "bg-purple-50",  text: "text-purple-800", dot: "bg-purple-600" },
+  APPROVED:          { bg: "bg-green-50",   text: "text-green-800",  dot: "bg-green-600"  },
 };
 
 function statusLabel(s: string): string {
@@ -225,8 +268,14 @@ const submitSchema = z.object({
   email:     z.string().email("Valid email required"),
   projectId: z.string().min(1, "Please select a project"),
   subject:   z.string().min(1, "Subject is required"),
+  // New-requirement-only fields (validated only when requestType = "implementation")
+  businessGoal:    z.string().optional(),
+  currentPain:     z.string().optional(),
+  expectedOutcome: z.string().optional(),
+  targetDate:      z.string().optional(),
 });
 type SubmitInput = z.infer<typeof submitSchema>;
+type RequestType = "support" | "implementation";
 
 function SubmitTicketModal({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
@@ -243,6 +292,7 @@ function SubmitTicketModal({ onClose }: { onClose: () => void }) {
   const [captchaToken, setCaptchaToken]       = useState<string | undefined>();
   const [captchaAnswer, setCaptchaAnswer]     = useState<string>("");
   const [captchaReset, setCaptchaReset]       = useState(0);
+  const [requestType, setRequestType]         = useState<RequestType>("support");
   const { data: session } = useSession();
   const sessionUser = session?.user as unknown as { name?: string; email?: string } | undefined;
 
@@ -260,7 +310,7 @@ function SubmitTicketModal({ onClose }: { onClose: () => void }) {
     staleTime: 5 * 60 * 1000,
   });
 
-  const { register, handleSubmit, control, formState: { errors } } = useForm<SubmitInput>({
+  const { register, handleSubmit, control, setError, formState: { errors } } = useForm<SubmitInput>({
     resolver: zodResolver(submitSchema),
     defaultValues: { name: sessionUser?.name ?? "", email: sessionUser?.email ?? "" },
   });
@@ -298,6 +348,15 @@ function SubmitTicketModal({ onClose }: { onClose: () => void }) {
       fd.append("projectName",   selectedProject?.projectName ?? "");
       fd.append("captchaToken",  captchaToken  ?? "");
       fd.append("captchaAnswer", captchaAnswer ?? "");
+      fd.append("requestType",   requestType);
+      if (requestType === "implementation") {
+        fd.append("businessGoal",    data.businessGoal    ?? "");
+        fd.append("currentPain",     data.currentPain     ?? "");
+        fd.append("expectedOutcome", data.expectedOutcome ?? "");
+        if (data.targetDate) {
+          fd.append("targetDate", new Date(data.targetDate).toISOString());
+        }
+      }
       attachmentFiles.forEach((files, i) => {
         for (const file of files) {
           fd.append("attachments", new File([file], `d${i}_${file.name}`, { type: file.type }));
@@ -324,6 +383,24 @@ function SubmitTicketModal({ onClose }: { onClose: () => void }) {
     );
     setDescErrors(errs);
     if (errs.some(Boolean)) return;
+
+    if (requestType === "implementation") {
+      const required: Array<[keyof SubmitInput, string]> = [
+        ["businessGoal",    "Business goal"],
+        ["currentPain",     "Current pain point"],
+        ["expectedOutcome", "Expected outcome"],
+      ];
+      let hasError = false;
+      for (const [key, label] of required) {
+        const v = (data[key] ?? "").toString().trim();
+        if (v.length < 10) {
+          setError(key, { type: "manual", message: `${label} must be at least 10 characters` });
+          hasError = true;
+        }
+      }
+      if (hasError) return;
+    }
+
     mutation.mutate(data);
   };
 
@@ -360,8 +437,39 @@ function SubmitTicketModal({ onClose }: { onClose: () => void }) {
           </div>
         ) : (
           <>
-            <h2 className="text-xl font-bold text-gray-900 mb-5">Submit a Support Request</h2>
+            <h2 className="text-xl font-bold text-gray-900 mb-5">Submit a Request</h2>
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+              {/* Request type — choose Bug/Support OR New Requirement */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">What are you submitting?</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setRequestType("support")}
+                    className={`text-left p-3 rounded-lg border-2 transition-colors ${
+                      requestType === "support"
+                        ? "border-yellow-600 bg-yellow-50/50"
+                        : "border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <div className="font-medium text-sm">Bug / Support</div>
+                    <div className="text-xs text-gray-500 mt-1">Something is broken or not working as expected.</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRequestType("implementation")}
+                    className={`text-left p-3 rounded-lg border-2 transition-colors ${
+                      requestType === "implementation"
+                        ? "border-indigo-600 bg-indigo-50/50"
+                        : "border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <div className="font-medium text-sm text-indigo-700">New Requirement</div>
+                    <div className="text-xs text-gray-500 mt-1">Request a new feature. We'll plan it and send it back for your approval.</div>
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Your Name</label>
                 <input
@@ -411,10 +519,54 @@ function SubmitTicketModal({ onClose }: { onClose: () => void }) {
                 <input
                   {...register("subject")}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                  placeholder="Brief summary of the issue"
+                  placeholder={requestType === "implementation" ? "What feature do you want?" : "Brief summary of the issue"}
                 />
                 {errors.subject && <p className="text-red-500 text-xs mt-1">{errors.subject.message}</p>}
               </div>
+
+              {/* New-Requirement-only fields */}
+              {requestType === "implementation" && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Business goal</label>
+                    <textarea
+                      {...register("businessGoal")}
+                      rows={3}
+                      placeholder="What outcome are you trying to achieve?"
+                      className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${errors.businessGoal ? "border-red-400" : "border-gray-200"}`}
+                    />
+                    {errors.businessGoal && <p className="text-red-500 text-xs mt-1">{errors.businessGoal.message}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Current pain point</label>
+                    <textarea
+                      {...register("currentPain")}
+                      rows={3}
+                      placeholder="What's not working today?"
+                      className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${errors.currentPain ? "border-red-400" : "border-gray-200"}`}
+                    />
+                    {errors.currentPain && <p className="text-red-500 text-xs mt-1">{errors.currentPain.message}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Expected outcome</label>
+                    <textarea
+                      {...register("expectedOutcome")}
+                      rows={3}
+                      placeholder="How will you know this is solved?"
+                      className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${errors.expectedOutcome ? "border-red-400" : "border-gray-200"}`}
+                    />
+                    {errors.expectedOutcome && <p className="text-red-500 text-xs mt-1">{errors.expectedOutcome.message}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Target date <span className="text-gray-400">(optional)</span></label>
+                    <input
+                      {...register("targetDate")}
+                      type="date"
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </>
+              )}
 
               {/* Descriptions — one or more, each with its own image uploader */}
               <div className="space-y-3">
@@ -508,6 +660,7 @@ const PAGE_SIZE = 10;
 export default function PortalTickets() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const [tabFilter,      setTabFilter]      = useState<TabFilter>("all");
   const [statusFilter,   setStatusFilter]   = useState<StatusFilter>("");
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("");
   const [search,         setSearch]         = useState("");
@@ -518,6 +671,12 @@ export default function PortalTickets() {
   const [page,           setPage]           = useState(1);
   const [showForm,       setShowForm]       = useState(() => searchParams.get("new") === "1");
 
+  // Effective type filter sent to the server. Tabs always win when not "all".
+  const effectiveTypeFilter: readonly TicketTypeValue[] | null =
+    tabFilter === "bug"  ? BUG_TYPES :
+    tabFilter === "impl" ? IMPL_TYPES :
+    null;
+
   // Clean up ?new=1 from URL after reading it on mount
   useEffect(() => {
     if (searchParams.get("new") === "1") {
@@ -527,7 +686,7 @@ export default function PortalTickets() {
   }, []);
 
   const { data, isLoading, isError } = useQuery<TicketsResponse>({
-    queryKey: ["portal-tickets", statusFilter, priorityFilter, search, dateFrom, dateTo, sortOrder, page],
+    queryKey: ["portal-tickets", tabFilter, statusFilter, priorityFilter, search, dateFrom, dateTo, sortOrder, page],
     queryFn: async () => {
       const params = new URLSearchParams({
         sortOrder,
@@ -539,6 +698,11 @@ export default function PortalTickets() {
       if (search.trim())  params.set("search",   search.trim());
       if (dateFrom)       params.set("from",     dateFrom);
       if (dateTo)         params.set("to",       dateTo);
+      // Repeated `type` params produce ?type=A&type=B — server-side support is
+      // optional today; client-side fallback below handles older deployments.
+      if (effectiveTypeFilter) {
+        for (const t of effectiveTypeFilter) params.append("type", t);
+      }
       const res = await axios.get<TicketsResponse>(`/api/portal/tickets?${params}`, {
         withCredentials: true,
       });
@@ -546,7 +710,14 @@ export default function PortalTickets() {
     },
   });
 
-  const tickets    = data?.data ?? [];
+  const rawTickets = data?.data ?? [];
+  // Client-side fallback in case the portal endpoint hasn't picked up the
+  // new array filter yet. When the response carries a `type` field we trust
+  // it; otherwise we surface every ticket (preserves old behaviour).
+  const tickets =
+    effectiveTypeFilter && rawTickets.some((t) => t.type !== undefined)
+      ? rawTickets.filter((t) => !t.type || effectiveTypeFilter.includes(t.type))
+      : rawTickets;
   const totalPages = data?.totalPages ?? 1;
 
   const hasFilters = statusFilter || priorityFilter || search || dateFrom || dateTo;
@@ -580,6 +751,33 @@ export default function PortalTickets() {
           <span className="text-lg leading-none">+</span>
           Submit a Ticket
         </button>
+      </div>
+
+      {/* ── Type tabs ── */}
+      <div className="flex flex-wrap items-center gap-2 mb-4" role="tablist" aria-label="Ticket type tabs">
+        {([
+          { value: "all",  label: "All"                     },
+          { value: "bug",  label: "Bugs & Support"          },
+          { value: "impl", label: "New Requirements" },
+        ] as { value: TabFilter; label: string }[]).map((t) => {
+          const active = tabFilter === t.value;
+          return (
+            <button
+              key={t.value}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => { setTabFilter(t.value); setStatusFilter(""); setPage(1); }}
+              className={`text-sm font-medium px-4 py-2 rounded-lg transition-colors ${
+                active
+                  ? "bg-yellow-600 text-white"
+                  : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+              }`}
+            >
+              {t.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* ── Filter bar ── */}
@@ -658,9 +856,12 @@ export default function PortalTickets() {
         <div className="flex flex-wrap items-center gap-2">
           <SlidersHorizontal className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
 
-          {/* Status pill buttons */}
+          {/* Status pill buttons — filtered by active tab so customers don't see
+              implementation-only statuses on the Bug tab and vice versa. */}
           <div className="flex flex-wrap gap-1.5">
-            {STATUS_OPTIONS.map((opt) => (
+            {(tabFilter === "bug"  ? BUG_STATUS_OPTIONS  :
+              tabFilter === "impl" ? IMPL_STATUS_OPTIONS :
+              ALL_STATUS_OPTIONS).map((opt) => (
               <button
                 key={opt.value}
                 type="button"
