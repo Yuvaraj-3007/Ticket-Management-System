@@ -39,9 +39,15 @@ const submitSchema = z.object({
   email:     z.string().email("Valid email required"),
   projectId: z.string().min(1, "Please select a project"),
   subject:   z.string().min(1, "Subject is required"),
+  // Implementation-only fields (validated only when requestType = "implementation")
+  businessGoal:    z.string().optional(),
+  currentPain:     z.string().optional(),
+  expectedOutcome: z.string().optional(),
+  targetDate:      z.string().optional(),
 });
 
 type SubmitFormData = z.infer<typeof submitSchema>;
+type RequestType = "support" | "implementation";
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -56,6 +62,7 @@ export default function PortalSubmit() {
   const [captchaToken, setCaptchaToken]       = useState<string | undefined>();
   const [captchaAnswer, setCaptchaAnswer]     = useState<string>("");
   const [captchaReset, setCaptchaReset]       = useState(0);
+  const [requestType, setRequestType]         = useState<RequestType>("support");
 
   // Stable callback — prevents SimpleCaptcha from seeing a new onVerify reference
   // every time attachmentFiles changes, which would otherwise retrigger fetchChallenge
@@ -137,6 +144,7 @@ export default function PortalSubmit() {
   const {
     register,
     handleSubmit,
+    setError,
     formState: { errors },
   } = useForm<SubmitFormData>({
     resolver: zodResolver(submitSchema),
@@ -155,6 +163,16 @@ export default function PortalSubmit() {
       fd.append("projectName",  selectedProject?.projectName ?? "");
       fd.append("captchaToken",  captchaToken  ?? "");
       fd.append("captchaAnswer", captchaAnswer ?? "");
+      fd.append("requestType",   requestType);
+      if (requestType === "implementation") {
+        fd.append("businessGoal",    data.businessGoal    ?? "");
+        fd.append("currentPain",     data.currentPain     ?? "");
+        fd.append("expectedOutcome", data.expectedOutcome ?? "");
+        if (data.targetDate) {
+          // server expects ISO datetime — convert "YYYY-MM-DD" from <input type=date>
+          fd.append("targetDate", new Date(data.targetDate).toISOString());
+        }
+      }
       attachmentFiles.forEach((files, i) => {
         for (const file of files) {
           fd.append("attachments", new File([file], `d${i}_${file.name}`, { type: file.type }));
@@ -221,6 +239,24 @@ export default function PortalSubmit() {
     );
     setDescErrors(errs);
     if (errs.some(Boolean)) return;
+
+    if (requestType === "implementation") {
+      const required: Array<[keyof SubmitFormData, string]> = [
+        ["businessGoal",    "Business goal"],
+        ["currentPain",     "Current pain"],
+        ["expectedOutcome", "Expected outcome"],
+      ];
+      let hasError = false;
+      for (const [key, label] of required) {
+        const v = (data[key] ?? "").toString().trim();
+        if (v.length < 10) {
+          setError(key, { type: "manual", message: `${label} must be at least 10 characters` });
+          hasError = true;
+        }
+      }
+      if (hasError) return;
+    }
+
     mutation.mutate(data);
   };
 
@@ -313,6 +349,41 @@ export default function PortalSubmit() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 sm:space-y-5">
+                {/* Request type — choose what kind of request you're filing */}
+                <div className="space-y-2">
+                  <Label>What are you submitting?</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setRequestType("support")}
+                      className={`text-left p-3 rounded-lg border-2 transition-colors ${
+                        requestType === "support"
+                          ? "border-yellow-600 bg-yellow-50/40"
+                          : "border-gray-200 hover:border-gray-300"
+                      }`}
+                    >
+                      <div className="font-medium text-sm">Bug / Support</div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Something is broken or not working as expected.
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRequestType("implementation")}
+                      className={`text-left p-3 rounded-lg border-2 transition-colors ${
+                        requestType === "implementation"
+                          ? "border-indigo-600 bg-indigo-50/40"
+                          : "border-gray-200 hover:border-gray-300"
+                      }`}
+                    >
+                      <div className="font-medium text-sm text-indigo-700">New Requirement</div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Request a new feature. We'll review, plan it, and send it back for your approval.
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
                 {/* Name */}
                 <div className="space-y-1.5">
                   <Label htmlFor="name">Name</Label>
@@ -370,7 +441,7 @@ export default function PortalSubmit() {
                   <Label htmlFor="subject">Subject</Label>
                   <Input
                     id="subject"
-                    placeholder="Brief summary of the issue"
+                    placeholder={requestType === "implementation" ? "What feature do you want?" : "Brief summary of the issue"}
                     {...register("subject")}
                     className={errors.subject ? "border-red-400" : ""}
                   />
@@ -378,6 +449,59 @@ export default function PortalSubmit() {
                     <p className="text-red-500 text-xs">{errors.subject.message}</p>
                   )}
                 </div>
+
+                {/* Implementation-request-only fields */}
+                {requestType === "implementation" && (
+                  <>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="businessGoal">Business goal</Label>
+                      <Textarea
+                        id="businessGoal"
+                        rows={3}
+                        placeholder="What outcome are you trying to achieve?"
+                        {...register("businessGoal")}
+                        className={errors.businessGoal ? "border-red-400" : ""}
+                      />
+                      {errors.businessGoal && (
+                        <p className="text-red-500 text-xs">{errors.businessGoal.message}</p>
+                      )}
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="currentPain">Current pain point</Label>
+                      <Textarea
+                        id="currentPain"
+                        rows={3}
+                        placeholder="What's not working today?"
+                        {...register("currentPain")}
+                        className={errors.currentPain ? "border-red-400" : ""}
+                      />
+                      {errors.currentPain && (
+                        <p className="text-red-500 text-xs">{errors.currentPain.message}</p>
+                      )}
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="expectedOutcome">Expected outcome</Label>
+                      <Textarea
+                        id="expectedOutcome"
+                        rows={3}
+                        placeholder="How will you know this is solved?"
+                        {...register("expectedOutcome")}
+                        className={errors.expectedOutcome ? "border-red-400" : ""}
+                      />
+                      {errors.expectedOutcome && (
+                        <p className="text-red-500 text-xs">{errors.expectedOutcome.message}</p>
+                      )}
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="targetDate">Target date <span className="text-muted-foreground">(optional)</span></Label>
+                      <Input
+                        id="targetDate"
+                        type="date"
+                        {...register("targetDate")}
+                      />
+                    </div>
+                  </>
+                )}
 
                 {/* Descriptions — one or more, each with its own image uploader */}
                 <div className="space-y-3">

@@ -12,6 +12,7 @@ import {
 import {
   paginatedTicketsSchema,
   type ApiTicket,
+  TICKET_TYPE,
   TICKET_TYPES,
   PRIORITIES,
   STATUSES,
@@ -20,6 +21,7 @@ import {
   type StatusValue,
 } from "@tms/core";
 import {
+  CATEGORY_CLASS,
   CATEGORY_LABELS,
   PRIORITY_LABELS,
   STATUS_LABELS,
@@ -45,6 +47,17 @@ import {
 } from "lucide-react";
 
 const API_URL = import.meta.env.VITE_API_URL || "";
+
+// Tab filter buckets — drives the type[] sent to GET /api/tickets
+type TabFilter = "all" | "bug" | "impl";
+const BUG_TYPES: readonly TicketTypeValue[] = [
+  TICKET_TYPE.BUG,
+  TICKET_TYPE.REQUIREMENT,
+  TICKET_TYPE.TASK,
+  TICKET_TYPE.SUPPORT,
+  TICKET_TYPE.EXPLANATION,
+];
+const IMPL_TYPES: readonly TicketTypeValue[] = [TICKET_TYPE.IMPLEMENTATION];
 
 // ── Semantic design tokens (intentional fixed colors) ─────────────────────────
 
@@ -136,11 +149,24 @@ const columns = [
   }),
   col.accessor("type", {
     header: "Category",
-    cell: (info) => (
-      <span className="text-xs" style={{ color: "var(--rt-text-3)" }}>
-        {CATEGORY_LABELS[info.getValue()]}
-      </span>
-    ),
+    cell: (info) => {
+      const v   = info.getValue();
+      const cls = CATEGORY_CLASS[v];
+      if (cls) {
+        return (
+          <span
+            className={`inline-flex items-center px-2 py-0.5 rounded border text-xs font-medium ${cls}`}
+          >
+            {CATEGORY_LABELS[v]}
+          </span>
+        );
+      }
+      return (
+        <span className="text-xs" style={{ color: "var(--rt-text-3)" }}>
+          {CATEGORY_LABELS[v]}
+        </span>
+      );
+    },
   }),
   col.accessor("priority", {
     header: "Priority",
@@ -218,6 +244,7 @@ function Tickets() {
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 10 });
   const [searchInput, setSearchInput]       = useState("");
   const [search, setSearch]                 = useState("");
+  const [tabFilter, setTabFilter]           = useState<TabFilter>("all");
   const [statusFilter, setStatusFilter]     = useState<StatusValue | "">("");
   const [priorityFilter, setPriorityFilter] = useState<PriorityValue | "">("");
   const [typeFilter, setTypeFilter]         = useState<TicketTypeValue | "">("");
@@ -258,11 +285,19 @@ function Tickets() {
 
   useEffect(() => {
     setPagination((p) => ({ ...p, pageIndex: 0 }));
-  }, [search, statusFilter, priorityFilter, typeFilter, assigneeFilter, clientFilter, dateFrom, dateTo]);
+  }, [search, tabFilter, statusFilter, priorityFilter, typeFilter, assigneeFilter, clientFilter, dateFrom, dateTo]);
 
   const hasFilters =
     search !== "" || statusFilter !== "" || priorityFilter !== "" || typeFilter !== "" ||
     assigneeFilter !== "" || clientFilter !== "" || dateFrom !== "" || dateTo !== "";
+
+  // Effective type filter sent to the server. Tabs win when active so the user
+  // doesn't see contradictory filters (the dropdown is hidden in those tabs).
+  const effectiveTypeFilter: readonly TicketTypeValue[] | null =
+    tabFilter === "bug"  ? BUG_TYPES :
+    tabFilter === "impl" ? IMPL_TYPES :
+    typeFilter           ? [typeFilter] :
+    null;
 
   function clearFilters() {
     setSearchInput(""); setSearch("");
@@ -289,7 +324,7 @@ function Tickets() {
   });
 
   const { data: result, isLoading, isError } = useQuery({
-    queryKey: ["tickets", sorting, pagination, search, statusFilter, priorityFilter, typeFilter, assigneeFilter, clientFilter, dateFrom, dateTo],
+    queryKey: ["tickets", sorting, pagination, search, tabFilter, statusFilter, priorityFilter, typeFilter, assigneeFilter, clientFilter, dateFrom, dateTo],
     queryFn: async () => {
       const sortCol = sorting[0]?.id ?? "createdAt";
       const sortDir = sorting[0]?.desc !== false ? "desc" : "asc";
@@ -301,7 +336,11 @@ function Tickets() {
       if (search)         params.set("search",       search);
       if (statusFilter)   params.set("status",       statusFilter);
       if (priorityFilter) params.set("priority",     priorityFilter);
-      if (typeFilter)     params.set("type",          typeFilter);
+      // Repeated `type` query params produce an array filter on the server
+      // (ticketQuerySchema accepts string | string[] and normalises to string[]).
+      if (effectiveTypeFilter) {
+        for (const t of effectiveTypeFilter) params.append("type", t);
+      }
       if (assigneeFilter) params.set("assignedToId", assigneeFilter);
       if (clientFilter)   params.set("clientId",     clientFilter);
       if (dateFrom)       params.set("from",          dateFrom);
@@ -358,6 +397,30 @@ function Tickets() {
           </p>
         </div>
 
+        {/* ── Type tabs ── */}
+        <div className="flex flex-wrap items-center gap-2 mb-4" role="tablist" aria-label="Ticket type tabs">
+          {([
+            { value: "all",  label: "All"                     },
+            { value: "bug",  label: "Bugs & Support"          },
+            { value: "impl", label: "New Requirements" },
+          ] as { value: TabFilter; label: string }[]).map((t) => {
+            const active = tabFilter === t.value;
+            return (
+              <Button
+                key={t.value}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                variant={active ? "default" : "outline"}
+                size="sm"
+                onClick={() => { setTabFilter(t.value); setStatusFilter(""); }}
+              >
+                {t.label}
+              </Button>
+            );
+          })}
+        </div>
+
         {/* ── Filter bar ── */}
         <div className="flex flex-wrap items-center gap-2.5 mb-5">
           {/* Search */}
@@ -399,35 +462,44 @@ function Tickets() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all" className="text-xs">All statuses</SelectItem>
-              {STATUSES.map((s) => (
+              {/* Filter status options by active tab so impl-only statuses
+                  don't appear on Bug & Support and vice versa. */}
+              {(tabFilter === "bug"
+                ? STATUSES.filter((s) => !["SUBMITTED", "ADMIN_REVIEW", "PLANNING", "CUSTOMER_APPROVAL", "APPROVED"].includes(s))
+                : tabFilter === "impl"
+                ? (["SUBMITTED", "ADMIN_REVIEW", "PLANNING", "CUSTOMER_APPROVAL", "APPROVED", "OPEN_IN_PROGRESS", "OPEN_DONE", "CLOSED"] as StatusValue[])
+                : STATUSES
+              ).map((s) => (
                 <SelectItem key={s} value={s} className="text-xs">{STATUS_LABELS[s]}</SelectItem>
               ))}
             </SelectContent>
           </Select>
 
-          {/* Category filter */}
-          <Select
-            value={typeFilter}
-            onValueChange={(v) => setTypeFilter((v as string) === "all" ? "" : (v as TicketTypeValue))}
-          >
-            <SelectTrigger
-              className="h-8 text-xs rounded-lg px-3 border w-full sm:w-[148px]"
-              style={{
-                background: "var(--rt-surface)",
-                border:     "1px solid var(--rt-border)",
-                color:      typeFilter ? "var(--rt-text-2)" : "var(--rt-text-3)",
-                boxShadow:  "none",
-              }}
+          {/* Category filter — hidden when a type tab is active to avoid contradictory filters */}
+          {tabFilter === "all" && (
+            <Select
+              value={typeFilter}
+              onValueChange={(v) => setTypeFilter((v as string) === "all" ? "" : (v as TicketTypeValue))}
             >
-              <SelectValue placeholder="All categories" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all" className="text-xs">All categories</SelectItem>
-              {TICKET_TYPES.map((t) => (
-                <SelectItem key={t} value={t} className="text-xs">{CATEGORY_LABELS[t]}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+              <SelectTrigger
+                className="h-8 text-xs rounded-lg px-3 border w-full sm:w-[148px]"
+                style={{
+                  background: "var(--rt-surface)",
+                  border:     "1px solid var(--rt-border)",
+                  color:      typeFilter ? "var(--rt-text-2)" : "var(--rt-text-3)",
+                  boxShadow:  "none",
+                }}
+              >
+                <SelectValue placeholder="All categories" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="text-xs">All categories</SelectItem>
+                {TICKET_TYPES.map((t) => (
+                  <SelectItem key={t} value={t} className="text-xs">{CATEGORY_LABELS[t]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
 
           {/* Priority filter */}
           <Select
@@ -647,9 +719,17 @@ function Tickets() {
                           <span className="text-xs font-bold uppercase tracking-wider" style={{ color: pc.textLight }}>
                             {PRIORITY_LABELS[ticket.priority]}
                           </span>
-                          <span className="text-xs" style={{ color: "var(--rt-text-3)" }}>
-                            {CATEGORY_LABELS[ticket.type]}
-                          </span>
+                          {CATEGORY_CLASS[ticket.type] ? (
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded border text-xs font-medium ${CATEGORY_CLASS[ticket.type]}`}
+                            >
+                              {CATEGORY_LABELS[ticket.type]}
+                            </span>
+                          ) : (
+                            <span className="text-xs" style={{ color: "var(--rt-text-3)" }}>
+                              {CATEGORY_LABELS[ticket.type]}
+                            </span>
+                          )}
                           <span className="text-xs font-mono ml-auto" style={{ color: "var(--rt-text-3)" }}>
                             {new Date(ticket.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                           </span>

@@ -5,9 +5,10 @@ import {
   apiTicketSchema,
   assignableUsersSchema,
   type AssignableUser,
-  STATUSES,
   TICKET_TYPES,
   PRIORITIES,
+  TICKET_TYPE,
+  legalNextStatuses,
   type StatusValue,
   type TicketTypeValue,
   type PriorityValue,
@@ -20,8 +21,9 @@ import {
   PRIORITY_LABELS,
   STATUS_LABELS,
 } from "@/lib/ticket-badges";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Loader2 } from "lucide-react";
 import { EnumSelect } from "@/components/EnumSelect";
+import { ImplementationPanel } from "@/components/ImplementationPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -164,6 +166,70 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
     },
   });
 
+  const estimatedHoursMutation = useMutation({
+    mutationFn: async (val: number | null) => {
+      const res = await axios.patch(
+        `${API_URL}/api/tickets/${ticketId}/estimated-hours`,
+        { estimatedHours: val },
+        { withCredentials: true },
+      );
+      return res.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["ticket", ticketId] }),
+  });
+
+  const actualHoursMutation = useMutation({
+    mutationFn: async (val: number | null) => {
+      const res = await axios.patch(
+        `${API_URL}/api/tickets/${ticketId}/actual-hours`,
+        { actualHours: val },
+        { withCredentials: true },
+      );
+      return res.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["ticket", ticketId] }),
+  });
+
+  const aiEstimateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await axios.post(
+        `${API_URL}/api/tickets/${ticketId}/estimate-hours-ai`,
+        {},
+        { withCredentials: true },
+      );
+      return res.data as { estimatedHours: number };
+    },
+    onSuccess: (data) => {
+      // Apply the AI suggestion via the regular PATCH mutation so the
+      // estimated-hours field updates and the ticket query is invalidated.
+      estimatedHoursMutation.mutate(data.estimatedHours);
+    },
+  });
+
+  // Hours inputs are uncontrolled — typing only updates the input element;
+  // we read e.target.value on blur and commit via mutation. The `key` prop
+  // (server-confirmed value) re-mounts the input whenever the ticket value
+  // changes externally so the displayed value stays in sync without an
+  // effect that calls setState (which trips react-hooks/set-state-in-effect).
+  const estimatedDefault = ticket?.estimatedHours == null ? "" : String(Number(ticket.estimatedHours));
+  const actualDefault    = ticket?.actualHours    == null ? "" : String(Number(ticket.actualHours));
+
+  function commitHours(
+    raw: string,
+    current: number | null | undefined,
+    mutate: (val: number | null) => void,
+  ) {
+    const trimmed = raw.trim();
+    if (trimmed === "") {
+      if (current != null) mutate(null);
+      return;
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed)) return;
+    if (current != null && Number(current) === parsed) return;
+    mutate(parsed);
+  }
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -210,7 +276,7 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
         <DetailRow label="Status">
           <EnumSelect
             value={ticket.status}
-            options={STATUSES}
+            options={legalNextStatuses(ticket.status, ticket.type) as readonly StatusValue[]}
             labels={STATUS_LABELS}
             onValueChange={(val) => statusMutation.mutate(val)}
             disabled={statusMutation.isPending}
@@ -239,6 +305,95 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
             isError={priorityMutation.isError}
             errorMessage="Failed to update priority"
           />
+        </DetailRow>
+        <DetailRow label="Estimated Hours">
+          <div className="flex items-center gap-2">
+            <input
+              key={`estimated-${estimatedDefault}`}
+              type="number"
+              min="0"
+              max="9999.99"
+              step="0.25"
+              defaultValue={estimatedDefault}
+              onBlur={(e) =>
+                commitHours(
+                  e.currentTarget.value,
+                  ticket.estimatedHours ?? null,
+                  (v) => estimatedHoursMutation.mutate(v),
+                )
+              }
+              disabled={estimatedHoursMutation.isPending || aiEstimateMutation.isPending}
+              placeholder="—"
+              aria-label="Estimated hours"
+              className="h-9 px-3 rounded-md border border-border bg-background text-sm w-[100px] disabled:opacity-50"
+            />
+            <button
+              type="button"
+              onClick={() => aiEstimateMutation.mutate()}
+              disabled={aiEstimateMutation.isPending || estimatedHoursMutation.isPending}
+              title="AI estimate"
+              aria-label="AI estimate"
+              className="inline-flex items-center gap-1 h-9 px-2 rounded-md border border-border bg-secondary text-secondary-foreground text-xs hover:bg-secondary/80 disabled:opacity-50"
+            >
+              {aiEstimateMutation.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5" />
+              )}
+              AI
+            </button>
+            <span className="text-xs text-muted-foreground" data-testid="estimated-hours-display">
+              {ticket.estimatedHours == null ? "—" : `${Number(ticket.estimatedHours)}h`}
+            </span>
+            {estimatedHoursMutation.isPending && !aiEstimateMutation.isPending && (
+              <span className="text-xs text-muted-foreground">Saving…</span>
+            )}
+          </div>
+          {estimatedHoursMutation.isError && (
+            <p className="text-xs text-destructive mt-1">Failed to update estimated hours</p>
+          )}
+          {aiEstimateMutation.isError && (
+            <p className="text-xs text-destructive mt-1">Failed to get AI estimate</p>
+          )}
+        </DetailRow>
+        <DetailRow label="Actual Hours">
+          <div className="flex items-center gap-2">
+            <input
+              key={`actual-${actualDefault}`}
+              type="number"
+              min="0"
+              max="9999.99"
+              step="0.25"
+              defaultValue={actualDefault}
+              onBlur={(e) =>
+                commitHours(
+                  e.currentTarget.value,
+                  ticket.actualHours ?? null,
+                  (v) => actualHoursMutation.mutate(v),
+                )
+              }
+              disabled={actualHoursMutation.isPending}
+              placeholder="—"
+              aria-label="Actual hours"
+              className="h-9 px-3 rounded-md border border-border bg-background text-sm w-[100px] disabled:opacity-50"
+            />
+            <span className="text-xs text-muted-foreground" data-testid="actual-hours-display">
+              {ticket.actualHours == null ? "—" : `${Number(ticket.actualHours)}h`}
+            </span>
+            {actualHoursMutation.isPending && (
+              <span className="text-xs text-muted-foreground">Saving…</span>
+            )}
+            {ticket.actualHours != null &&
+              ticket.estimatedHours != null &&
+              Number(ticket.actualHours) > Number(ticket.estimatedHours) * 1.2 && (
+                <Badge variant="destructive" className="ml-2 text-[10px]">
+                  Over estimate
+                </Badge>
+              )}
+          </div>
+          {actualHoursMutation.isError && (
+            <p className="text-xs text-destructive mt-1">Failed to update actual hours</p>
+          )}
         </DetailRow>
         <DetailRow label="Assigned to">
           <Select
@@ -271,6 +426,9 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
           })}
         </DetailRow>
       </div>
+
+      {/* Implementation request workflow panel — admin side */}
+      {ticket.type === TICKET_TYPE.IMPLEMENTATION && <ImplementationPanel ticket={ticket} />}
 
       {/* Description / message body */}
       <div>

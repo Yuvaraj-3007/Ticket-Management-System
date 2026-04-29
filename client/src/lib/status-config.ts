@@ -8,4 +8,10 @@ export const STATUS_CONFIG: Record<string, { dot: string; text: string; bg: stri
   OPEN_DONE:          { dot: "var(--status-open-done-dot)",            text: "var(--status-open-done-text)",            bg: "var(--status-open-done-bg)"           },
   WAITING_FOR_CLIENT: { dot: "var(--status-waiting-for-client-dot)",   text: "var(--status-waiting-for-client-text)",   bg: "var(--status-waiting-for-client-bg)"  },
   CLOSED:             { dot: "var(--status-closed-dot)",               text: "var(--status-closed-text)",               bg: "var(--status-closed-bg)"              },
+  // Implementation-request workflow statuses (literal colors — design tokens optional later)
+  SUBMITTED:          { dot: "#64748b", text: "#475569", bg: "#f1f5f9" },
+  ADMIN_REVIEW:       { dot: "#3b82f6", text: "#1d4ed8", bg: "#dbeafe" },
+  PLANNING:           { dot: "#f59e0b", text: "#b45309", bg: "#fef3c7" },
+  CUSTOMER_APPROVAL:  { dot: "#a855f7", text: "#7e22ce", bg: "#f3e8ff" },
+  APPROVED:           { dot: "#22c55e", text: "#15803d", bg: "#dcfce7" },
 };

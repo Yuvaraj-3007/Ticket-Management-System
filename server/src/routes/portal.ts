@@ -9,6 +9,8 @@ import {
   portalSignupSchema,
   portalRatingSchema,
   createCommentSchema,
+  implementationSubmitSchema,
+  implementationRejectSchema,
   TICKET_TYPE,
   PRIORITY,
   STATUS,
@@ -18,6 +20,11 @@ import {
 import prisma from "../lib/prisma.js";
 import { getAllClients, getClientBySlug, getClientProjects } from "../lib/hrms.js";
 import { requireCustomer } from "../middleware/customerAuth.js";
+import {
+  sendImplementationRequestSubmittedEmail,
+  sendImplementationApprovedEmail,
+  sendImplementationRejectedEmail,
+} from "../lib/mailer.js";
 import { Prisma } from "../generated/prisma/client.js";
 import { uploadArray, validateMagicBytes } from "../lib/upload.js";
 import fs from "node:fs";
@@ -85,6 +92,19 @@ const PORTAL_TICKET_SELECT = {
   updatedAt:       true,
   assignedTo:      { select: { name: true } },
   attachments:     { select: { id: true, filename: true, mimetype: true, size: true, filepath: true, createdAt: true } },
+  implementationRequest: {
+    select: {
+      businessGoal:            true,
+      currentPain:             true,
+      expectedOutcome:         true,
+      targetDate:              true,
+      planContent:             true,
+      planPostedAt:            true,
+      customerApprovedAt:      true,
+      customerRejectedAt:      true,
+      customerRejectionReason: true,
+    },
+  },
 } as const;
 
 // H7 — strip characters that could cause stored XSS via filename display
@@ -266,17 +286,30 @@ router.get("/dashboard", requireCustomer, async (req, res) => {
   }
   const clientFilter: Prisma.TicketWhereInput = { hrmsClientId: portalClientId };
 
-  // Start of current month
-  const monthStart = new Date();
-  monthStart.setDate(1);
-  monthStart.setHours(0, 0, 0, 0);
+  // Optional ?month=YYYY-MM filter — when set, count tickets created in that
+  // calendar month. When absent, defaults to current calendar month.
+  const monthParam = typeof req.query.month === "string" ? req.query.month : undefined;
+  let monthRange: { gte: Date; lt: Date };
+  if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
+    const [y, m] = monthParam.split("-").map(Number);
+    monthRange = {
+      gte: new Date(Date.UTC(y, m - 1, 1, 0, 0, 0)),
+      lt:  new Date(Date.UTC(y, m,     1, 0, 0, 0)),
+    };
+  } else {
+    const now   = new Date();
+    const gte   = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(),     1));
+    const lt    = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    monthRange  = { gte, lt };
+  }
+  const monthFilter = { createdAt: { gte: monthRange.gte, lt: monthRange.lt } };
 
-  const [total, statusCounts, openTickets, recent, dailyRaw] = await Promise.all([
-    prisma.ticket.count({ where: { senderEmail: email, ...clientFilter } }),
+  const [total, statusCounts, openTickets, recent, dailyRaw, newRequirementsTotal, bugSupportTotal] = await Promise.all([
+    prisma.ticket.count({ where: { senderEmail: email, ...clientFilter, ...monthFilter } }),
 
     prisma.ticket.groupBy({
       by: ["status"],
-      where: { senderEmail: email, ...clientFilter },
+      where: { senderEmail: email, ...clientFilter, ...monthFilter },
       _count: { _all: true },
     }),
 
@@ -304,19 +337,30 @@ router.get("/dashboard", requireCustomer, async (req, res) => {
       select:  PORTAL_TICKET_SELECT,
     }),
 
-    // Daily ticket counts for current month — cast to int to avoid BigInt serialization
+    // Daily ticket counts for the selected month
     prisma.$queryRaw<Array<{ day: number; count: number }>>`
         SELECT DATE_PART('day', "createdAt")::int AS day,
                COUNT(*)::int                       AS count
         FROM   tickets
         WHERE  "senderEmail" = ${email}
           AND  "hrmsClientId" = ${portalClientId}
-          AND  "createdAt"   >= ${monthStart}
+          AND  "createdAt"   >= ${monthRange.gte}
+          AND  "createdAt"   <  ${monthRange.lt}
         GROUP  BY DATE_PART('day', "createdAt")
         ORDER  BY day
       `.catch((err: unknown) => {
       console.error("[portal/dashboard] daily query error:", err instanceof Error ? err.message : String(err));
       return [] as Array<{ day: number; count: number }>;
+    }),
+
+    // Customer's new-requirement (IMPLEMENTATION) tickets in the selected month
+    prisma.ticket.count({
+      where: { senderEmail: email, ...clientFilter, ...monthFilter, type: "IMPLEMENTATION" },
+    }),
+
+    // Customer's bug/support (everything except IMPLEMENTATION)
+    prisma.ticket.count({
+      where: { senderEmail: email, ...clientFilter, ...monthFilter, type: { not: "IMPLEMENTATION" } },
     }),
   ]);
 
@@ -330,7 +374,13 @@ router.get("/dashboard", requireCustomer, async (req, res) => {
   const qa         = getCount("OPEN_QA");
   const done       = getCount("OPEN_DONE");
   const closed     = getCount("CLOSED");
-  const open       = notStarted + inProgress + qa + done;
+  // Implementation-request workflow statuses count toward "open" (active) too
+  const submitted        = getCount("SUBMITTED");
+  const adminReview      = getCount("ADMIN_REVIEW");
+  const planning         = getCount("PLANNING");
+  const customerApproval = getCount("CUSTOMER_APPROVAL");
+  const approved         = getCount("APPROVED");
+  const open       = notStarted + inProgress + qa + done + submitted + adminReview + planning + customerApproval + approved;
 
   res.json({
     total,
@@ -349,6 +399,8 @@ router.get("/dashboard", requireCustomer, async (req, res) => {
     })),
     daily: dailyRaw.map((r) => ({ day: Number(r.day), count: Number(r.count) })),
     recent,
+    newRequirementsTotal,
+    bugSupportTotal,
   });
 });
 
@@ -807,7 +859,11 @@ router.post("/:slug/tickets", submitLimiter, async (req, res) => {
     }
   }
 
-  const parsed = portalSubmitSchema.safeParse(req.body);
+  const isImplementation = req.body?.requestType === "implementation";
+
+  const parsed = isImplementation
+    ? implementationSubmitSchema.safeParse(req.body)
+    : portalSubmitSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ fieldErrors: parsed.error.flatten().fieldErrors });
     return;
@@ -822,6 +878,14 @@ router.post("/:slug/tickets", submitLimiter, async (req, res) => {
 
   const { name, email, subject, body, projectId, projectName } = parsed.data;
   const slug = req.params["slug"] as string;
+  const implFields = isImplementation
+    ? {
+        businessGoal:    (parsed.data as any).businessGoal    as string,
+        currentPain:     (parsed.data as any).currentPain     as string,
+        expectedOutcome: (parsed.data as any).expectedOutcome as string,
+        targetDate:      (parsed.data as any).targetDate      as string | undefined,
+      }
+    : null;
 
   const client = await getClientBySlug(slug);
   if (!client) {
@@ -856,15 +920,15 @@ router.post("/:slug/tickets", submitLimiter, async (req, res) => {
       const safeEmail   = email.replace(/[\r\n]/g, "");
       const description = `From: ${safeName} <${safeEmail}>\n\n${body}`;
 
-      return tx.ticket.create({
+      const created = await tx.ticket.create({
         data: {
           id:            randomUUID(),
           ticketId,
           title:         subject,
           description,
-          type:            TICKET_TYPE.SUPPORT,
+          type:            isImplementation ? TICKET_TYPE.IMPLEMENTATION : TICKET_TYPE.SUPPORT,
           priority:        PRIORITY.MEDIUM,
-          status:          STATUS.UN_ASSIGNED,
+          status:          isImplementation ? STATUS.SUBMITTED : STATUS.UN_ASSIGNED,
           project:         projectName ?? "General",
           senderName:      name,
           senderEmail:     email,
@@ -877,6 +941,21 @@ router.post("/:slug/tickets", submitLimiter, async (req, res) => {
         },
         select: { id: true, ticketId: true },
       });
+
+      if (isImplementation && implFields) {
+        await tx.implementationRequest.create({
+          data: {
+            id:              randomUUID(),
+            ticketId:        created.id,
+            businessGoal:    implFields.businessGoal,
+            currentPain:     implFields.currentPain,
+            expectedOutcome: implFields.expectedOutcome,
+            targetDate:      implFields.targetDate ? new Date(implFields.targetDate) : null,
+          },
+        });
+      }
+
+      return created;
     });
   } catch (e) {
     console.error("[portal] Failed to create ticket:", e instanceof Error ? e.message : String(e));
@@ -903,7 +982,110 @@ router.post("/:slug/tickets", submitLimiter, async (req, res) => {
     }
   }
 
+  if (isImplementation && implFields && admin.email) {
+    void sendImplementationRequestSubmittedEmail({
+      adminEmail:   admin.email,
+      ticketId:     ticket.ticketId,
+      customerName: name,
+      title:        subject,
+      businessGoal: implFields.businessGoal,
+    }).catch((err) => console.error("[mailer] impl-submitted failed:", err));
+  }
+
   res.status(201).json({ ticketId: ticket.ticketId, id: ticket.id });
+});
+
+// ─── Customer-side workflow actions on implementation tickets ────────────
+
+router.post("/tickets/:id/approve-plan", requireCustomer, async (req: Request<{ id: string }>, res: Response) => {
+  const ticket = await prisma.ticket.findUnique({
+    where:  { ticketId: req.params.id },
+    select: { id: true, ticketId: true, type: true, status: true, senderEmail: true, senderName: true, title: true },
+  });
+  if (!ticket) { res.status(404).json({ error: "Ticket not found" }); return; }
+
+  const userEmail = (req as any).user?.email?.toLowerCase();
+  if (
+    ticket.senderEmail?.toLowerCase() !== userEmail ||
+    ticket.type   !== TICKET_TYPE.IMPLEMENTATION ||
+    ticket.status !== STATUS.CUSTOMER_APPROVAL
+  ) {
+    res.status(403).json({ error: "Not allowed" });
+    return;
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.implementationRequest.update({
+      where: { ticketId: ticket.id },
+      data:  { customerApprovedAt: new Date(), customerRejectedAt: null, customerRejectionReason: null },
+    });
+    return tx.ticket.update({
+      where:  { id: ticket.id },
+      data:   { status: STATUS.APPROVED },
+      select: PORTAL_TICKET_SELECT,
+    });
+  });
+
+  const admin = await prisma.user.findFirst({ where: { role: ROLES.ADMIN }, select: { email: true } });
+  if (admin?.email) {
+    void sendImplementationApprovedEmail({
+      adminEmail:   admin.email,
+      ticketId:     ticket.ticketId,
+      customerName: ticket.senderName ?? "Customer",
+      title:        ticket.title,
+    }).catch((err) => console.error("[mailer] impl-approved failed:", err));
+  }
+
+  res.json(updated);
+});
+
+router.post("/tickets/:id/reject-plan", requireCustomer, async (req: Request<{ id: string }>, res: Response) => {
+  const parsed = implementationRejectSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ fieldErrors: parsed.error.flatten().fieldErrors });
+    return;
+  }
+
+  const ticket = await prisma.ticket.findUnique({
+    where:  { ticketId: req.params.id },
+    select: { id: true, ticketId: true, type: true, status: true, senderEmail: true, senderName: true, title: true },
+  });
+  if (!ticket) { res.status(404).json({ error: "Ticket not found" }); return; }
+
+  const userEmail = (req as any).user?.email?.toLowerCase();
+  if (
+    ticket.senderEmail?.toLowerCase() !== userEmail ||
+    ticket.type   !== TICKET_TYPE.IMPLEMENTATION ||
+    ticket.status !== STATUS.CUSTOMER_APPROVAL
+  ) {
+    res.status(403).json({ error: "Not allowed" });
+    return;
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.implementationRequest.update({
+      where: { ticketId: ticket.id },
+      data:  { customerRejectedAt: new Date(), customerRejectionReason: parsed.data.reason, customerApprovedAt: null },
+    });
+    return tx.ticket.update({
+      where:  { id: ticket.id },
+      data:   { status: STATUS.PLANNING },
+      select: PORTAL_TICKET_SELECT,
+    });
+  });
+
+  const admin = await prisma.user.findFirst({ where: { role: ROLES.ADMIN }, select: { email: true } });
+  if (admin?.email) {
+    void sendImplementationRejectedEmail({
+      adminEmail:   admin.email,
+      ticketId:     ticket.ticketId,
+      customerName: ticket.senderName ?? "Customer",
+      title:        ticket.title,
+      reason:       parsed.data.reason,
+    }).catch((err) => console.error("[mailer] impl-rejected failed:", err));
+  }
+
+  res.json(updated);
 });
 
 export default router;

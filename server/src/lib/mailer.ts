@@ -118,3 +118,262 @@ export async function sendPasswordResetEmail(opts: SendPasswordResetEmailOptions
     );
   }
 }
+
+// ──────────────────────────────────────
+// Implementation-request workflow emails
+// Each function mirrors the sendReplyEmail pattern:
+//   - early return when recipient empty
+//   - early return when SMTP not configured
+//   - CRLF stripping on user-supplied strings
+//   - try/catch around sendMail with console.error (never throws)
+// ──────────────────────────────────────
+
+function appBaseUrl(): string {
+  return process.env.RIGHT_TRACKER_URL ?? process.env.BETTER_AUTH_URL ?? "http://localhost:5173";
+}
+
+function stripCrlf(s: string): string {
+  return s.replace(/[\r\n]/g, " ");
+}
+
+function normaliseBody(s: string): string {
+  return s.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
+export interface SendImplementationRequestSubmittedEmailOptions {
+  adminEmail:   string;
+  ticketId:     string;
+  customerName: string;
+  title:        string;
+  businessGoal: string;
+}
+
+export async function sendImplementationRequestSubmittedEmail(
+  opts: SendImplementationRequestSubmittedEmailOptions,
+): Promise<void> {
+  const { adminEmail, ticketId, customerName, title, businessGoal } = opts;
+  if (!adminEmail)     return;
+  if (!isConfigured()) return;
+
+  const safeCustomer = stripCrlf(customerName);
+  const safeTitle    = stripCrlf(title);
+  const safeGoal     = normaliseBody(businessGoal);
+  const link         = `${appBaseUrl()}/tickets/${ticketId}`;
+  const subject      = `[${ticketId}] New implementation request: ${safeTitle}`;
+  const text = [
+    `${safeCustomer} submitted a new implementation request.`,
+    "",
+    `Ticket: ${ticketId}`,
+    `Title:  ${safeTitle}`,
+    "",
+    "Business goal:",
+    safeGoal,
+    "",
+    `Open in admin: ${link}`,
+  ].join("\n");
+
+  try {
+    await getTransporter().sendMail({
+      from: GMAIL_USER,
+      to:   adminEmail,
+      subject,
+      text,
+    });
+    console.log(`[mailer] Implementation submitted email sent for ${ticketId}`);
+  } catch (err) {
+    console.error(
+      "[mailer] Failed to send implementation submitted email for",
+      ticketId,
+      ":",
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+}
+
+export interface SendImplementationPlanPostedEmailOptions {
+  customerEmail: string;
+  ticketId:      string;
+  customerName:  string;
+  title:         string;
+}
+
+export async function sendImplementationPlanPostedEmail(
+  opts: SendImplementationPlanPostedEmailOptions,
+): Promise<void> {
+  const { customerEmail, ticketId, customerName, title } = opts;
+  if (!customerEmail)  return;
+  if (!isConfigured()) return;
+
+  const safeCustomer = stripCrlf(customerName);
+  const safeTitle    = stripCrlf(title);
+  const link         = `${appBaseUrl()}/portal/tickets/${ticketId}`;
+  const subject      = `[${ticketId}] Your implementation plan is ready to review`;
+  const text = [
+    `Hi ${safeCustomer},`,
+    "",
+    `Your implementation plan for "${safeTitle}" is ready for review.`,
+    "",
+    `Review and approve here: ${link}`,
+    "",
+    "— Right Tracker Support Team",
+  ].join("\n");
+
+  try {
+    await getTransporter().sendMail({
+      from: GMAIL_USER,
+      to:   customerEmail,
+      subject,
+      text,
+    });
+    console.log(`[mailer] Implementation plan-posted email sent for ${ticketId}`);
+  } catch (err) {
+    console.error(
+      "[mailer] Failed to send implementation plan-posted email for",
+      ticketId,
+      ":",
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+}
+
+export interface SendImplementationApprovedEmailOptions {
+  adminEmail:   string;
+  ticketId:     string;
+  customerName: string;
+  title:        string;
+}
+
+export async function sendImplementationApprovedEmail(
+  opts: SendImplementationApprovedEmailOptions,
+): Promise<void> {
+  const { adminEmail, ticketId, customerName, title } = opts;
+  if (!adminEmail)     return;
+  if (!isConfigured()) return;
+
+  const safeCustomer = stripCrlf(customerName);
+  const safeTitle    = stripCrlf(title);
+  const link         = `${appBaseUrl()}/tickets/${ticketId}`;
+  const subject      = `[${ticketId}] Plan approved: ${safeTitle}`;
+  const text = [
+    `${safeCustomer} approved the plan for "${safeTitle}".`,
+    "",
+    "You can start implementation.",
+    "",
+    `Open in admin: ${link}`,
+  ].join("\n");
+
+  try {
+    await getTransporter().sendMail({
+      from: GMAIL_USER,
+      to:   adminEmail,
+      subject,
+      text,
+    });
+    console.log(`[mailer] Implementation approved email sent for ${ticketId}`);
+  } catch (err) {
+    console.error(
+      "[mailer] Failed to send implementation approved email for",
+      ticketId,
+      ":",
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+}
+
+export interface SendImplementationRejectedEmailOptions {
+  adminEmail:   string;
+  ticketId:     string;
+  customerName: string;
+  title:        string;
+  reason:       string;
+}
+
+export async function sendImplementationRejectedEmail(
+  opts: SendImplementationRejectedEmailOptions,
+): Promise<void> {
+  const { adminEmail, ticketId, customerName, title, reason } = opts;
+  if (!adminEmail)     return;
+  if (!isConfigured()) return;
+
+  const safeCustomer = stripCrlf(customerName);
+  const safeTitle    = stripCrlf(title);
+  const safeReason   = normaliseBody(reason);
+  const link         = `${appBaseUrl()}/tickets/${ticketId}`;
+  const subject      = `[${ticketId}] Plan rejected: ${safeTitle}`;
+  const text = [
+    `${safeCustomer} rejected the plan for "${safeTitle}".`,
+    "",
+    "Reason:",
+    safeReason,
+    "",
+    `Open in admin: ${link}`,
+  ].join("\n");
+
+  try {
+    await getTransporter().sendMail({
+      from: GMAIL_USER,
+      to:   adminEmail,
+      subject,
+      text,
+    });
+    console.log(`[mailer] Implementation rejected email sent for ${ticketId}`);
+  } catch (err) {
+    console.error(
+      "[mailer] Failed to send implementation rejected email for",
+      ticketId,
+      ":",
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+}
+
+export interface SendImplementationMoreInfoRequestedEmailOptions {
+  customerEmail: string;
+  ticketId:      string;
+  customerName:  string;
+  title:         string;
+  message:       string;
+}
+
+export async function sendImplementationMoreInfoRequestedEmail(
+  opts: SendImplementationMoreInfoRequestedEmailOptions,
+): Promise<void> {
+  const { customerEmail, ticketId, customerName, title, message } = opts;
+  if (!customerEmail)  return;
+  if (!isConfigured()) return;
+
+  const safeCustomer = stripCrlf(customerName);
+  const safeTitle    = stripCrlf(title);
+  const safeMessage  = normaliseBody(message);
+  const link         = `${appBaseUrl()}/portal/tickets/${ticketId}`;
+  const subject      = `[${ticketId}] More information needed: ${safeTitle}`;
+  const text = [
+    `Hi ${safeCustomer},`,
+    "",
+    `We need more information on your implementation request "${safeTitle}".`,
+    "",
+    "Message from the support team:",
+    safeMessage,
+    "",
+    `Reply here: ${link}`,
+    "",
+    "— Right Tracker Support Team",
+  ].join("\n");
+
+  try {
+    await getTransporter().sendMail({
+      from: GMAIL_USER,
+      to:   customerEmail,
+      subject,
+      text,
+    });
+    console.log(`[mailer] Implementation more-info email sent for ${ticketId}`);
+  } catch (err) {
+    console.error(
+      "[mailer] Failed to send implementation more-info email for",
+      ticketId,
+      ":",
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+}

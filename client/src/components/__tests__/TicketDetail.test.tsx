@@ -194,6 +194,34 @@ describe("TicketDetail — ticket data rendering", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Suite 3b — Hours fields rendering
+// ---------------------------------------------------------------------------
+
+describe("TicketDetail — hours fields rendering", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("renders estimated and actual hours as Nh when set", async () => {
+    setupGetSuccess({ ...BASE_TICKET, estimatedHours: 8, actualHours: 4 });
+    renderDetail();
+    await screen.findByText("TKT-0001");
+    expect(screen.getByText("Estimated Hours")).toBeInTheDocument();
+    expect(screen.getByText("Actual Hours")).toBeInTheDocument();
+    expect(screen.getByTestId("estimated-hours-display")).toHaveTextContent("8h");
+    expect(screen.getByTestId("actual-hours-display")).toHaveTextContent("4h");
+  });
+
+  it("renders an em-dash when both hours fields are null", async () => {
+    setupGetSuccess({ ...BASE_TICKET, estimatedHours: null, actualHours: null });
+    renderDetail();
+    await screen.findByText("TKT-0001");
+    expect(screen.getByTestId("estimated-hours-display")).toHaveTextContent("—");
+    expect(screen.getByTestId("actual-hours-display")).toHaveTextContent("—");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Suite 4 — Assignee display
 // ---------------------------------------------------------------------------
 
