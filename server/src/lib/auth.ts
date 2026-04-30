@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { ROLES } from "@tms/core";
 import prisma from "./prisma.js";
 
 const isProd = process.env.NODE_ENV === "production";
@@ -52,7 +53,7 @@ export const auth = betterAuth({
     additionalFields: {
       role: {
         type: "string",
-        defaultValue: "AGENT",
+        defaultValue: ROLES.AGENT,
         input: false,
       },
       isActive: {

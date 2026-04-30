@@ -451,10 +451,12 @@ function Tickets() {
             )}
           </div>
 
-          {/* Status filter — only show statuses visible in the ticket list */}
+          {/* Status filter — only show statuses visible in the ticket list.
+              Disabled on the Reopened tab because the tab already forces status=REOPENED. */}
           <Select
             value={statusFilter}
             onValueChange={(v) => setStatusFilter((v as string) === "all" ? "" : (v as StatusValue))}
+            disabled={tabFilter === "reopened"}
           >
             <SelectTrigger
               className="h-8 text-xs rounded-lg px-3 border w-full sm:w-[140px]"
@@ -463,6 +465,8 @@ function Tickets() {
                 border:     "1px solid var(--rt-border)",
                 color:      statusFilter ? "var(--rt-text-2)" : "var(--rt-text-3)",
                 boxShadow:  "none",
+                opacity:    tabFilter === "reopened" ? 0.5 : 1,
+                cursor:     tabFilter === "reopened" ? "not-allowed" : undefined,
               }}
             >
               <SelectValue placeholder="All statuses" />

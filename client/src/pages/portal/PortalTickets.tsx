@@ -812,7 +812,9 @@ export default function PortalTickets() {
           <SlidersHorizontal className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
 
           {/* Status pill buttons — filtered by active tab so customers don't see
-              implementation-only statuses on the Bug tab and vice versa. */}
+              implementation-only statuses on the Bug tab and vice versa.
+              Hidden on the Reopened tab because the tab already forces status=REOPENED. */}
+          {tabFilter !== "reopened" && (
           <div className="flex flex-wrap gap-1.5">
             {(tabFilter === "bug"  ? BUG_STATUS_OPTIONS  :
               tabFilter === "impl" ? IMPL_STATUS_OPTIONS :
@@ -831,6 +833,7 @@ export default function PortalTickets() {
               </button>
             ))}
           </div>
+          )}
 
           {/* Clear filters */}
           {hasFilters && (

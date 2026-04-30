@@ -26,8 +26,7 @@ async function wiseworkFetch(path: string, method: string, body: object): Promis
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      console.warn(`[wisework-notifier] Non-OK response ${res.status}: ${text}`);
+      console.warn(`[wisework-notifier] Non-OK response ${res.status} from Wisework notification endpoint`);
     }
   } catch (err) {
     console.warn("[wisework-notifier] Failed to notify Wisework:", err instanceof Error ? err.message : String(err));

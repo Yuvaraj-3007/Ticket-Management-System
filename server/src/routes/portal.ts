@@ -445,6 +445,11 @@ router.get("/tickets", requireCustomer, async (req, res) => {
     hrmsClientId: portalClientId,
   };
 
+  const TICKET_TYPES_SET = new Set(["BUG", "REQUIREMENT", "TASK", "SUPPORT", "EXPLANATION", "IMPLEMENTATION"]);
+  if (typeFilter && typeFilter.some((t) => !TICKET_TYPES_SET.has(t))) {
+    res.status(400).json({ error: "Invalid type value" });
+    return;
+  }
   if (typeFilter && typeFilter.length > 0) {
     where.type = { in: typeFilter as any[] };
   }

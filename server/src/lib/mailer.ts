@@ -6,6 +6,10 @@ function isConfigured(): boolean {
   return !!(GMAIL_USER && GMAIL_APP_PASSWORD);
 }
 
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]!);
+}
+
 let transporter: nodemailer.Transporter | null = null;
 
 function getTransporter(): nodemailer.Transporter {
@@ -395,7 +399,7 @@ export async function sendTicketReopenedEmail(
       to,
       subject: `[${ticketId}] Ticket Reopened by ${safeName}`,
       text:    `${safeName} has reopened ticket ${ticketId}: "${safeTitle}".\n\nView ticket: ${safeUrl}`,
-      html:    `<p><strong>${safeName}</strong> has reopened ticket <strong>${ticketId}</strong>: "${safeTitle}".</p><p><a href="${safeUrl}">View ticket</a></p>`,
+      html:    `<p><strong>${escapeHtml(safeName)}</strong> has reopened ticket <strong>${ticketId}</strong>: "${escapeHtml(safeTitle)}".</p><p><a href="${safeUrl}">View ticket</a></p>`,
     });
     console.log(`[mailer] Ticket reopened email sent for ${ticketId}`);
   } catch (err) {
