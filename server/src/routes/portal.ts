@@ -421,6 +421,12 @@ router.get("/tickets", requireCustomer, async (req, res) => {
     pageSize  = "10",
   } = req.query as Record<string, string | undefined>;
 
+  // type can be a single string or an array (e.g. ?type=BUG&type=SUPPORT)
+  const rawType = req.query.type;
+  const typeFilter: string[] | undefined = rawType
+    ? (Array.isArray(rawType) ? rawType as string[] : [rawType as string])
+    : undefined;
+
   const pageNum  = Math.max(1, parseInt(page  ?? "1",  10) || 1);
   const pageSz   = Math.min(100, Math.max(1, parseInt(pageSize ?? "10", 10) || 10));
   const order    = sortOrder === "asc" ? "asc" : "desc";
@@ -439,6 +445,9 @@ router.get("/tickets", requireCustomer, async (req, res) => {
     hrmsClientId: portalClientId,
   };
 
+  if (typeFilter && typeFilter.length > 0) {
+    where.type = { in: typeFilter as any[] };
+  }
   if (status) {
     if (!(STATUSES as readonly string[]).includes(status)) {
       res.status(400).json({ error: "Invalid status value" });
