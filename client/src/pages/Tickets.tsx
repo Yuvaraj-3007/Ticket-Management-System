@@ -49,7 +49,7 @@ import {
 const API_URL = import.meta.env.VITE_API_URL || "";
 
 // Tab filter buckets — drives the type[] sent to GET /api/tickets
-type TabFilter = "all" | "bug" | "impl";
+type TabFilter = "all" | "bug" | "impl" | "reopened";
 const BUG_TYPES: readonly TicketTypeValue[] = [
   TICKET_TYPE.BUG,
   TICKET_TYPE.REQUIREMENT,
@@ -294,10 +294,16 @@ function Tickets() {
   // Effective type filter sent to the server. Tabs win when active so the user
   // doesn't see contradictory filters (the dropdown is hidden in those tabs).
   const effectiveTypeFilter: readonly TicketTypeValue[] | null =
-    tabFilter === "bug"  ? BUG_TYPES :
-    tabFilter === "impl" ? IMPL_TYPES :
-    typeFilter           ? [typeFilter] :
+    tabFilter === "bug"      ? BUG_TYPES :
+    tabFilter === "impl"     ? IMPL_TYPES :
+    tabFilter === "reopened" ? null :
+    typeFilter               ? [typeFilter] :
     null;
+
+  // When the reopened tab is active, force status filter to REOPENED regardless
+  // of what the status dropdown says.
+  const effectiveStatusFilter: StatusValue | "" =
+    tabFilter === "reopened" ? "REOPENED" : statusFilter;
 
   function clearFilters() {
     setSearchInput(""); setSearch("");
@@ -333,9 +339,9 @@ function Tickets() {
         page:     String(pagination.pageIndex + 1),
         pageSize: String(pagination.pageSize),
       });
-      if (search)         params.set("search",       search);
-      if (statusFilter)   params.set("status",       statusFilter);
-      if (priorityFilter) params.set("priority",     priorityFilter);
+      if (search)                 params.set("search",       search);
+      if (effectiveStatusFilter) params.set("status",       effectiveStatusFilter);
+      if (priorityFilter)        params.set("priority",     priorityFilter);
       // Repeated `type` query params produce an array filter on the server
       // (ticketQuerySchema accepts string | string[] and normalises to string[]).
       if (effectiveTypeFilter) {
@@ -400,9 +406,10 @@ function Tickets() {
         {/* ── Type tabs ── */}
         <div className="flex flex-wrap items-center gap-2 mb-4" role="tablist" aria-label="Ticket type tabs">
           {([
-            { value: "all",  label: "All"                     },
-            { value: "bug",  label: "Bugs & Support"          },
-            { value: "impl", label: "New Requirements" },
+            { value: "all",      label: "All"              },
+            { value: "bug",      label: "Bugs & Support"   },
+            { value: "impl",     label: "New Requirements" },
+            { value: "reopened", label: "Reopened"         },
           ] as { value: TabFilter; label: string }[]).map((t) => {
             const active = tabFilter === t.value;
             return (

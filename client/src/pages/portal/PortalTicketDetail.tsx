@@ -264,6 +264,14 @@ export default function PortalTicketDetail() {
     enabled: Boolean(id),
   });
 
+  const reopenMutation = useMutation({
+    mutationFn: () =>
+      axios.post(`/api/portal/tickets/${ticket?.ticketId}/reopen`, {}, { withCredentials: true }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["portal-ticket", id] });
+    },
+  });
+
   const commentMutation = useMutation({
     mutationFn: async (content: string) => {
       const fd = new FormData();
@@ -340,7 +348,22 @@ export default function PortalTicketDetail() {
             <DetailRow label="Status">
               <Badge variant={statusVariant(ticket.status as Parameters<typeof statusVariant>[0])}>{statusLabel(ticket.status)}</Badge>
             </DetailRow>
-<DetailRow label="Created">
+            {(ticket.status === "CLOSED" || ticket.status === "OPEN_DONE") && (
+              <DetailRow label="Reopen">
+                <button
+                  type="button"
+                  onClick={() => reopenMutation.mutate()}
+                  disabled={reopenMutation.isPending}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50 transition-colors"
+                >
+                  {reopenMutation.isPending ? "Reopening…" : "Reopen Ticket"}
+                </button>
+                {reopenMutation.isError && (
+                  <p className="text-xs text-destructive mt-1">Failed to reopen ticket</p>
+                )}
+              </DetailRow>
+            )}
+            <DetailRow label="Created">
               {formatDate(ticket.createdAt)}
             </DetailRow>
             <DetailRow label="Last updated">

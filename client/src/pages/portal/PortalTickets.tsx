@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm, Controller } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import axios from "axios";
@@ -11,12 +11,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ImageUploadField } from "@/components/portal/ImageUploadField";
 import { Search, LayoutList, LayoutGrid, ArrowUpDown, SlidersHorizontal, X, Plus } from "lucide-react";
 import { TICKET_TYPE, type TicketTypeValue } from "@tms/core";
-
-interface HrmsProject {
-  id:          string;
-  projectCode: string;
-  projectName: string;
-}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -33,7 +27,7 @@ type PortalTicket = {
 };
 
 // Tab filter buckets — drives the type[] sent to GET /api/portal/tickets
-type TabFilter = "all" | "bug" | "impl";
+type TabFilter = "all" | "bug" | "impl" | "reopened";
 const BUG_TYPES: readonly TicketTypeValue[] = [
   TICKET_TYPE.BUG,
   TICKET_TYPE.REQUIREMENT,
@@ -51,8 +45,7 @@ interface TicketsResponse {
   totalPages: number;
 }
 
-type StatusFilter   = "" | "UN_ASSIGNED" | "OPEN_NOT_STARTED" | "OPEN_IN_PROGRESS" | "OPEN_QA" | "OPEN_DONE" | "WAITING_FOR_CLIENT" | "CLOSED" | "SUBMITTED" | "ADMIN_REVIEW" | "PLANNING" | "CUSTOMER_APPROVAL" | "APPROVED";
-type PriorityFilter = "" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+type StatusFilter   = "" | "UN_ASSIGNED" | "OPEN_NOT_STARTED" | "OPEN_IN_PROGRESS" | "OPEN_QA" | "OPEN_DONE" | "WAITING_FOR_CLIENT" | "CLOSED" | "SUBMITTED" | "ADMIN_REVIEW" | "PLANNING" | "CUSTOMER_APPROVAL" | "APPROVED" | "REOPENED";
 type SortOrder      = "desc" | "asc";
 type ViewMode       = "list" | "grid";
 
@@ -90,6 +83,7 @@ const ALL_STATUS_OPTIONS: StatusOption[] = [
   { value: "",                    label: "All"               },
   ...BUG_STATUS_OPTIONS.slice(1),
   ...IMPL_STATUS_OPTIONS.slice(1).filter((opt) => !BUG_STATUS_OPTIONS.some((b) => b.value === opt.value)),
+  { value: "REOPENED",            label: "Reopened"          },
 ];
 
 const STATUS_OPTIONS = ALL_STATUS_OPTIONS; // legacy alias used by statusLabel()
@@ -107,6 +101,7 @@ const STATUS_STYLE: Record<string, { bg: string; text: string; dot: string }> = 
   PLANNING:          { bg: "bg-amber-50",   text: "text-amber-800",  dot: "bg-amber-500"  },
   CUSTOMER_APPROVAL: { bg: "bg-purple-50",  text: "text-purple-800", dot: "bg-purple-600" },
   APPROVED:          { bg: "bg-green-50",   text: "text-green-800",  dot: "bg-green-600"  },
+  REOPENED:          { bg: "bg-orange-50",  text: "text-orange-800", dot: "bg-orange-600" },
 };
 
 function statusLabel(s: string): string {
@@ -266,7 +261,6 @@ function SkeletonRows() {
 const submitSchema = z.object({
   name:      z.string().min(1, "Name is required"),
   email:     z.string().email("Valid email required"),
-  projectId: z.string().min(1, "Please select a project"),
   subject:   z.string().min(1, "Subject is required"),
   // New-requirement-only fields (validated only when requestType = "implementation")
   businessGoal:    z.string().optional(),
@@ -283,7 +277,6 @@ function SubmitTicketModal({ onClose }: { onClose: () => void }) {
   // fall back to localStorage for clients that navigate directly to /portal/tickets
   const urlSlug  = window.location.pathname.match(/\/portal\/([^/]+)\//)?.[1] ?? "";
   const slug     = urlSlug || localStorage.getItem("portal-slug") || "";
-  const clientId = localStorage.getItem("portal-client-id") ?? "";
   const [submitted, setSubmitted]             = useState<string | null>(null);
   const [descriptions, setDescriptions]       = useState<string[]>([""]);
   const [descErrors,   setDescErrors]         = useState<string[]>([""]);
@@ -296,21 +289,7 @@ function SubmitTicketModal({ onClose }: { onClose: () => void }) {
   const { data: session } = useSession();
   const sessionUser = session?.user as unknown as { name?: string; email?: string } | undefined;
 
-  const { data: projects = [], isLoading: projectsLoading } = useQuery<HrmsProject[]>({
-    queryKey: ["portal-projects", clientId || slug],
-    queryFn: async () => {
-      if (clientId) {
-        const res = await axios.get<HrmsProject[]>(`/api/portal/projects?clientId=${clientId}`);
-        return res.data;
-      }
-      const res = await axios.get<HrmsProject[]>(`/api/portal/${slug}/projects`);
-      return res.data;
-    },
-    enabled: Boolean(clientId || slug),
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const { register, handleSubmit, control, setError, formState: { errors } } = useForm<SubmitInput>({
+  const { register, handleSubmit, setError, formState: { errors } } = useForm<SubmitInput>({
     resolver: zodResolver(submitSchema),
     defaultValues: { name: sessionUser?.name ?? "", email: sessionUser?.email ?? "" },
   });
@@ -338,14 +317,11 @@ function SubmitTicketModal({ onClose }: { onClose: () => void }) {
 
   const mutation = useMutation({
     mutationFn: (data: SubmitInput) => {
-      const selectedProject = projects.find((p) => p.id === data.projectId);
       const fd = new FormData();
       fd.append("name",         data.name);
       fd.append("email",        data.email);
       fd.append("subject",      data.subject);
       fd.append("body",         descriptions.join("\n\n---\n\n"));
-      fd.append("projectId",    data.projectId);
-      fd.append("projectName",   selectedProject?.projectName ?? "");
       fd.append("captchaToken",  captchaToken  ?? "");
       fd.append("captchaAnswer", captchaAnswer ?? "");
       fd.append("requestType",   requestType);
@@ -488,30 +464,6 @@ function SubmitTicketModal({ onClose }: { onClose: () => void }) {
                   readOnly
                   className="w-full border border-gray-100 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-400 cursor-not-allowed"
                 />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Project</label>
-                <Controller
-                  name="projectId"
-                  control={control}
-                  render={({ field }) => (
-                    <select
-                      value={field.value ?? ""}
-                      onChange={field.onChange}
-                      disabled={projectsLoading}
-                      className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 bg-white ${
-                        errors.projectId ? "border-red-400" : "border-gray-200"
-                      } ${projectsLoading ? "opacity-50 cursor-not-allowed" : ""}`}
-                    >
-                      <option value="">{projectsLoading ? "Loading projects…" : "Select a project"}</option>
-                      {projects.map((p) => (
-                        <option key={p.id} value={p.id}>{p.projectName}</option>
-                      ))}
-                    </select>
-                  )}
-                />
-                {errors.projectId && <p className="text-red-500 text-xs mt-1">{errors.projectId.message}</p>}
               </div>
 
               <div>
@@ -662,7 +614,6 @@ export default function PortalTickets() {
   const navigate = useNavigate();
   const [tabFilter,      setTabFilter]      = useState<TabFilter>("all");
   const [statusFilter,   setStatusFilter]   = useState<StatusFilter>("");
-  const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("");
   const [search,         setSearch]         = useState("");
   const [dateFrom,       setDateFrom]       = useState("");
   const [dateTo,         setDateTo]         = useState("");
@@ -673,9 +624,14 @@ export default function PortalTickets() {
 
   // Effective type filter sent to the server. Tabs always win when not "all".
   const effectiveTypeFilter: readonly TicketTypeValue[] | null =
-    tabFilter === "bug"  ? BUG_TYPES :
-    tabFilter === "impl" ? IMPL_TYPES :
+    tabFilter === "bug"      ? BUG_TYPES :
+    tabFilter === "impl"     ? IMPL_TYPES :
+    tabFilter === "reopened" ? null :
     null;
+
+  // When the reopened tab is active, force status filter to REOPENED.
+  const effectiveStatusFilter: StatusFilter =
+    tabFilter === "reopened" ? "REOPENED" : statusFilter;
 
   // Clean up ?new=1 from URL after reading it on mount
   useEffect(() => {
@@ -686,15 +642,14 @@ export default function PortalTickets() {
   }, []);
 
   const { data, isLoading, isError } = useQuery<TicketsResponse>({
-    queryKey: ["portal-tickets", tabFilter, statusFilter, priorityFilter, search, dateFrom, dateTo, sortOrder, page],
+    queryKey: ["portal-tickets", tabFilter, statusFilter, search, dateFrom, dateTo, sortOrder, page],
     queryFn: async () => {
       const params = new URLSearchParams({
         sortOrder,
         page:     String(page),
         pageSize: String(PAGE_SIZE),
       });
-      if (statusFilter)   params.set("status",   statusFilter);
-      if (priorityFilter) params.set("priority", priorityFilter);
+      if (effectiveStatusFilter) params.set("status", effectiveStatusFilter);
       if (search.trim())  params.set("search",   search.trim());
       if (dateFrom)       params.set("from",     dateFrom);
       if (dateTo)         params.set("to",       dateTo);
@@ -720,11 +675,10 @@ export default function PortalTickets() {
       : rawTickets;
   const totalPages = data?.totalPages ?? 1;
 
-  const hasFilters = statusFilter || priorityFilter || search || dateFrom || dateTo;
+  const hasFilters = statusFilter || search || dateFrom || dateTo;
 
   function clearFilters() {
     setStatusFilter("");
-    setPriorityFilter("");
     setSearch("");
     setDateFrom("");
     setDateTo("");
@@ -756,9 +710,10 @@ export default function PortalTickets() {
       {/* ── Type tabs ── */}
       <div className="flex flex-wrap items-center gap-2 mb-4" role="tablist" aria-label="Ticket type tabs">
         {([
-          { value: "all",  label: "All"                     },
-          { value: "bug",  label: "Bugs & Support"          },
-          { value: "impl", label: "New Requirements" },
+          { value: "all",      label: "All"              },
+          { value: "bug",      label: "Bugs & Support"   },
+          { value: "impl",     label: "New Requirements" },
+          { value: "reopened", label: "Reopened"         },
         ] as { value: TabFilter; label: string }[]).map((t) => {
           const active = tabFilter === t.value;
           return (
@@ -852,7 +807,7 @@ export default function PortalTickets() {
           </div>
         </div>
 
-        {/* Row 2: Status pills + Priority dropdown */}
+        {/* Row 2: Status pills */}
         <div className="flex flex-wrap items-center gap-2">
           <SlidersHorizontal className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
 

@@ -14,4 +14,5 @@ export const STATUS_CONFIG: Record<string, { dot: string; text: string; bg: stri
   PLANNING:           { dot: "#f59e0b", text: "#b45309", bg: "#fef3c7" },
   CUSTOMER_APPROVAL:  { dot: "#a855f7", text: "#7e22ce", bg: "#f3e8ff" },
   APPROVED:           { dot: "#22c55e", text: "#15803d", bg: "#dcfce7" },
+  REOPENED:           { dot: "#ea580c", text: "#9a3412", bg: "#ffedd5" },
 };

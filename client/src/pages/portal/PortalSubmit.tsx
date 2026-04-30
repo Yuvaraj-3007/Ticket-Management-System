@@ -22,12 +22,6 @@ interface PortalInfo {
   slug: string;
 }
 
-interface HrmsProject {
-  id:          string;
-  projectCode: string;
-  projectName: string;
-}
-
 interface SubmitTicketResponse {
   ticketId: string;
 }
@@ -37,7 +31,6 @@ interface SubmitTicketResponse {
 const submitSchema = z.object({
   name:      z.string().min(1, "Name is required"),
   email:     z.string().email("Valid email required"),
-  projectId: z.string().min(1, "Please select a project"),
   subject:   z.string().min(1, "Subject is required"),
   // Implementation-only fields (validated only when requestType = "implementation")
   businessGoal:    z.string().optional(),
@@ -103,17 +96,6 @@ export default function PortalSubmit() {
     retry: false,
   });
 
-  // Fetch projects for this client
-  const { data: projects = [], isLoading: projectsLoading } = useQuery<HrmsProject[]>({
-    queryKey: ["portal-projects", slug],
-    queryFn: async () => {
-      const res = await axios.get<HrmsProject[]>(`/api/portal/${slug}/projects`);
-      return res.data;
-    },
-    enabled: Boolean(portalInfo) && customerRole !== "CUSTOMER",
-    staleTime: 5 * 60 * 1000,
-  });
-
   // On 404, redirect to /portal/404
   useEffect(() => {
     if (
@@ -153,14 +135,11 @@ export default function PortalSubmit() {
 
   const mutation = useMutation<SubmitTicketResponse, unknown, SubmitFormData>({
     mutationFn: async (data) => {
-      const selectedProject = projects.find((p) => p.id === data.projectId);
       const fd = new FormData();
       fd.append("name",        data.name);
       fd.append("email",       data.email);
       fd.append("subject",     data.subject);
       fd.append("body",        descriptions.join("\n\n---\n\n"));
-      fd.append("projectId",   data.projectId);
-      fd.append("projectName",  selectedProject?.projectName ?? "");
       fd.append("captchaToken",  captchaToken  ?? "");
       fd.append("captchaAnswer", captchaAnswer ?? "");
       fd.append("requestType",   requestType);
@@ -410,29 +389,6 @@ export default function PortalSubmit() {
                   />
                   {errors.email && (
                     <p className="text-red-500 text-xs">{errors.email.message}</p>
-                  )}
-                </div>
-
-                {/* Project */}
-                <div className="space-y-1.5">
-                  <Label htmlFor="projectId">Project</Label>
-                  <select
-                    id="projectId"
-                    {...register("projectId")}
-                    disabled={projectsLoading}
-                    className={`w-full h-9 rounded-md border bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 ${errors.projectId ? "border-red-400" : "border-input"}`}
-                  >
-                    <option value="">
-                      {projectsLoading ? "Loading projects…" : "Select a project"}
-                    </option>
-                    {projects.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.projectName}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.projectId && (
-                    <p className="text-red-500 text-xs">{errors.projectId.message}</p>
                   )}
                 </div>
 

@@ -115,6 +115,7 @@ enum Status {
   PLANNING
   CUSTOMER_APPROVAL
   APPROVED
+  REOPENED
 }
 
 model Ticket {

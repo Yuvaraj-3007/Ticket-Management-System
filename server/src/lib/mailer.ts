@@ -377,3 +377,28 @@ export async function sendImplementationMoreInfoRequestedEmail(
     );
   }
 }
+
+export async function sendTicketReopenedEmail(
+  to: string,
+  ticketId: string,
+  ticketTitle: string,
+  customerName: string,
+  ticketUrl: string,
+): Promise<void> {
+  if (!isConfigured()) return;
+  try {
+    const safeTitle = stripCrlf(ticketTitle);
+    const safeName  = stripCrlf(customerName);
+    const safeUrl   = stripCrlf(ticketUrl);
+    await getTransporter().sendMail({
+      from:    `"Right Tracker" <${GMAIL_USER}>`,
+      to,
+      subject: `[${ticketId}] Ticket Reopened by ${safeName}`,
+      text:    `${safeName} has reopened ticket ${ticketId}: "${safeTitle}".\n\nView ticket: ${safeUrl}`,
+      html:    `<p><strong>${safeName}</strong> has reopened ticket <strong>${ticketId}</strong>: "${safeTitle}".</p><p><a href="${safeUrl}">View ticket</a></p>`,
+    });
+    console.log(`[mailer] Ticket reopened email sent for ${ticketId}`);
+  } catch (err) {
+    console.error("[mailer] sendTicketReopenedEmail error:", err instanceof Error ? err.message : String(err));
+  }
+}
