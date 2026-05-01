@@ -30,5 +30,7 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["src/setupTests.ts"],
     globals: true,
+    // maxWorkers: 1 prevents worker spawn timeouts on WSL2 where parallel forks race for resources
+    maxWorkers: 1,
   },
 });
