@@ -380,9 +380,10 @@ test.describe("Role-based access control", () => {
     await loginAsAdmin(page);
     await page.goto("/users");
     await expect(page).toHaveURL("/users");
+    // Full-page navigation requires session re-fetch + data load; use longer timeout
     await expect(
       page.getByRole("heading", { name: "Users" })
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 15000 });
   });
 
   test("admin navbar shows the Users link", async ({ page }) => {

@@ -54,6 +54,11 @@ RUN mkdir -p /app/server/uploads
 COPY server/start.sh /app/start.sh
 RUN chmod +x /app/start.sh
 
+# Run as non-root user for security
+RUN addgroup --system --gid 10001 appgroup && adduser --system --uid 10001 --ingroup appgroup appuser
+RUN chown -R appuser:appgroup /app
+USER appuser
+
 EXPOSE 3000
 
 CMD ["/app/start.sh"]

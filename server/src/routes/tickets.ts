@@ -12,7 +12,7 @@ import { ticketQuerySchema, assignTicketSchema, updateStatusSchema, updateTypeSc
 import { Prisma } from "../generated/prisma/client.js";
 import { sendReplyEmail, sendImplementationPlanPostedEmail, sendImplementationMoreInfoRequestedEmail } from "../lib/mailer.js";
 import { notifyWiseworkAssignment, notifyWiseworkPriorityUpdate } from "../lib/wisework-notifier.js";
-import { getAllClients, getEmployeeDirectory, getProjectEmployees, type HrmsEmployee } from "../lib/hrms.js";
+import { getAllClients, getClientProjects, getEmployeeDirectory, getProjectEmployees, type HrmsEmployee } from "../lib/hrms.js";
 import { uploadArray } from "../lib/upload.js";
 
 // Wrap multer's callback API into a Promise so we can use await in async routes
@@ -42,6 +42,8 @@ const TICKET_SELECT = {
   priority:        true,
   status:          true,
   project:         true,
+  hrmsClientId:    true,
+  hrmsClientName:  true,
   hrmsProjectId:   true,
   hrmsProjectName: true,
   senderName:      true,
@@ -183,6 +185,17 @@ router.get("/clients", async (_req, res) => {
     orderBy:  { hrmsClientName: "asc" },
   });
   res.json(rows.map((r) => ({ id: r.hrmsClientId!, name: r.hrmsClientName ?? r.hrmsClientId! })));
+});
+
+// GET /api/tickets/projects?clientId= — admin project list for ticket project picker
+router.get("/projects", async (req, res) => {
+  const { clientId } = req.query as { clientId?: string };
+  if (!clientId || typeof clientId !== "string") {
+    res.status(400).json({ error: "clientId query param required" });
+    return;
+  }
+  const projects = await getClientProjects(clientId);
+  res.json(projects);
 });
 
 // GET /api/tickets/assignable-users — active users that can be assigned a ticket
@@ -574,6 +587,36 @@ router.patch("/:id/assignee", async (req: Request<{ id: string }>, res: Response
   }
 
   res.json(responseTicket);
+});
+
+// PATCH /api/tickets/:id/project — admin sets/changes the HRMS project for a ticket
+router.patch("/:id/project", async (req: Request<{ id: string }>, res: Response) => {
+  const { projectId, projectName, clientId, clientName } = req.body as {
+    projectId?: string; projectName?: string; clientId?: string; clientName?: string;
+  };
+
+  const ticket = await prisma.ticket.findUnique({
+    where:  { ticketId: req.params.id },
+    select: { id: true },
+  });
+  if (!ticket) {
+    res.status(404).json({ error: "Ticket not found" });
+    return;
+  }
+
+  const updated = await prisma.ticket.update({
+    where: { ticketId: req.params.id },
+    data:  {
+      hrmsProjectId:   projectId   ?? null,
+      hrmsProjectName: projectName ?? null,
+      hrmsClientId:    clientId    ?? null,
+      hrmsClientName:  clientName  ?? null,
+      project:         projectName ?? "General",
+    },
+    select: TICKET_SELECT,
+  });
+
+  res.json(serializeHours(updated));
 });
 
 // PATCH /api/tickets/:id/status — update the status of a ticket

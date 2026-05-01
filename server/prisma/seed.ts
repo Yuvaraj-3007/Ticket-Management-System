@@ -63,7 +63,7 @@ async function main() {
       },
     });
 
-    console.log("Admin user created (role: ADMIN)");
+    console.log(`Admin user created (role: ${ROLES.ADMIN})`);
   }
 
   // AI agent — used as the assignee for auto-resolution attempts
@@ -80,7 +80,7 @@ async function main() {
         isActive: true,
       },
     });
-    console.log("AI agent created (role: AGENT)");
+    console.log(`AI agent created (role: ${ROLES.AGENT})`);
   } else {
     console.log("AI agent already exists, skipping.");
   }

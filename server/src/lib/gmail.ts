@@ -171,8 +171,11 @@ export async function watchInbox(): Promise<void> {
     // Drain ALL pre-existing unread messages so only post-startup emails create tickets.
     // Set draining=true first so Pub/Sub notifications received during drain are ignored.
     draining = true;
-    await drainUnreadMessages();
-    draining = false;
+    try {
+      await drainUnreadMessages();
+    } finally {
+      draining = false;
+    }
   } catch (err: any) {
     const code   = err?.response?.status ?? err?.code;
     const data   = err?.response?.data ?? err?.message ?? String(err);

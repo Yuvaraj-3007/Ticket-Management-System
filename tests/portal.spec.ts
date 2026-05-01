@@ -765,3 +765,96 @@ test.describe("Multi-description body storage", () => {
     expect(ticket.description).toContain("\n\n---\n\n");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Ticket reopen
+// ---------------------------------------------------------------------------
+
+test.describe("Ticket reopen", () => {
+  test.describe.configure({ mode: "serial" });
+
+  const customerEmail    = "reopen-test-customer@example.com";
+  const customerPassword = "ReopenPass123";
+  let customerCookies: string;
+  let adminCookies: string;
+  let ticketId: string;
+
+  test.beforeAll(async ({ request }) => {
+    // Ensure customer account exists
+    await request.post(`${BASE}/api/portal/auth/signup`, {
+      data:    { name: "Reopen Customer", email: customerEmail, password: customerPassword },
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const loginRes = await loginAs(request, customerEmail, customerPassword);
+    expect(loginRes.status()).toBe(200);
+    customerCookies = loginRes.headers()["set-cookie"] ?? "";
+
+    const adminLogin = await loginAs(request, "admin@wisright.com", "Test@123");
+    expect(adminLogin.status()).toBe(200);
+    adminCookies = adminLogin.headers()["set-cookie"] ?? "";
+
+    // Create a ticket via email webhook so it gets a ticketId
+    const ticketRes = await createTicketViaEmail(request, {
+      from:    customerEmail,
+      subject: "Ticket to be reopened",
+      body:    "This ticket will be closed then reopened.",
+    });
+    expect(ticketRes.status()).toBe(201);
+    const body = await ticketRes.json();
+    ticketId = body.ticketId;
+
+    // Close it as admin
+    const closeRes = await request.patch(`${BASE}/api/tickets/${ticketId}/status`, {
+      data:    { status: "CLOSED" },
+      headers: { Cookie: adminCookies, "Content-Type": "application/json" },
+    });
+    expect(closeRes.status()).toBe(200);
+  });
+
+  test("customer can reopen a closed ticket", async ({ request }) => {
+    const res = await request.post(`${BASE}/api/portal/tickets/${ticketId}/reopen`, {
+      headers: { Cookie: customerCookies },
+    });
+    expect(res.status()).toBe(204);
+
+    // Verify status changed to REOPENED
+    const tRes = await request.get(`${BASE}/api/tickets/${ticketId}`, {
+      headers: { Cookie: adminCookies },
+    });
+    expect(tRes.status()).toBe(200);
+    const ticket = await tRes.json();
+    expect(ticket.status).toBe("REOPENED");
+  });
+
+  test("cannot reopen a ticket that is not closed/done", async ({ request }) => {
+    // Ticket is now REOPENED — trying to reopen again should fail
+    const res = await request.post(`${BASE}/api/portal/tickets/${ticketId}/reopen`, {
+      headers: { Cookie: customerCookies },
+    });
+    expect(res.status()).toBe(400);
+  });
+
+  test("non-owner customer cannot reopen another customer's ticket", async ({ request }) => {
+    // Sign up a different customer
+    const otherEmail = "reopen-other-customer@example.com";
+    await request.post(`${BASE}/api/portal/auth/signup`, {
+      data:    { name: "Other Customer", email: otherEmail, password: "OtherPass123" },
+      headers: { "Content-Type": "application/json" },
+    });
+    const otherLogin = await loginAs(request, otherEmail, "OtherPass123");
+    expect(otherLogin.status()).toBe(200);
+    const otherCookies = otherLogin.headers()["set-cookie"] ?? "";
+
+    // Close the ticket first via admin
+    await request.patch(`${BASE}/api/tickets/${ticketId}/status`, {
+      data:    { status: "CLOSED" },
+      headers: { Cookie: adminCookies, "Content-Type": "application/json" },
+    });
+
+    const res = await request.post(`${BASE}/api/portal/tickets/${ticketId}/reopen`, {
+      headers: { Cookie: otherCookies },
+    });
+    expect(res.status()).toBe(403);
+  });
+});
