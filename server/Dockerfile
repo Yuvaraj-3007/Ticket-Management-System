@@ -52,7 +52,7 @@ RUN mkdir -p /app/server/uploads
 
 # Startup script: runs migrations + seed + server
 COPY server/start.sh /app/start.sh
-RUN chmod +x /app/start.sh
+RUN sed -i 's/\r//' /app/start.sh && chmod +x /app/start.sh
 
 # Run as non-root user for security
 RUN groupadd --system --gid 10001 appgroup && useradd --system --uid 10001 --gid appgroup appuser
