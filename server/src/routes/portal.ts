@@ -12,6 +12,7 @@ import {
   implementationSubmitSchema,
   implementationRejectSchema,
   TICKET_TYPE,
+  TICKET_TYPES,
   PRIORITY,
   STATUS,
   ROLES,
@@ -418,6 +419,8 @@ router.get("/tickets", requireCustomer, async (req, res) => {
     page      = "1",
     pageSize  = "10",
   } = req.query as Record<string, string | undefined>;
+  const typeParam  = req.query.type;
+  const typeFilter = Array.isArray(typeParam) ? typeParam as string[] : typeParam ? [typeParam as string] : undefined;
 
   const pageNum  = Math.max(1, parseInt(page  ?? "1",  10) || 1);
   const pageSz   = Math.min(100, Math.max(1, parseInt(pageSize ?? "10", 10) || 10));
@@ -469,6 +472,10 @@ router.get("/tickets", requireCustomer, async (req, res) => {
   }
   if (from)   where.createdAt = { ...(where.createdAt as any), gte: new Date(from) };
   if (to)     where.createdAt = { ...(where.createdAt as any), lte: new Date(to) };
+  if (typeFilter && typeFilter.length > 0) {
+    const validTypes = typeFilter.filter((t) => (TICKET_TYPES as readonly string[]).includes(t));
+    if (validTypes.length > 0) where.type = { in: validTypes as any[] };
+  }
 
   const [rows, total] = await Promise.all([
     prisma.ticket.findMany({

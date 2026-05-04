@@ -936,6 +936,7 @@ router.post("/:id/comments", async (req: Request<{ id: string }>, res: Response)
         filepath:  f.path,
         mimetype:  f.mimetype,
         size:      f.size,
+        ticketId:  ticket.id,
         commentId: comment.id,
       })),
     });

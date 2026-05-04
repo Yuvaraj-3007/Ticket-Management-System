@@ -71,7 +71,7 @@ test.describe("Tickets page — navigation & auth", () => {
   });
 
   test("Tickets nav link is highlighted as active on /tickets", async ({ page }) => {
-    const link = page.getByRole("link", { name: "Tickets" });
+    const link = page.getByRole("link", { name: "Tickets", exact: true });
     await expect(link).toBeVisible();
     await expect(link).not.toHaveClass(/muted-foreground/);
   });
