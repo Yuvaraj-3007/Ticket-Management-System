@@ -286,6 +286,21 @@ export const requestMoreInfoSchema = z.object({
 export type RequestMoreInfoInput = z.infer<typeof requestMoreInfoSchema>;
 
 // ──────────────────────────────────────
+// Internal ticket submission schema
+// Used by authenticated agents via POST /api/internal/tickets
+// ──────────────────────────────────────
+
+export const INTERNAL_TICKET_TYPES = ["BUG", "REQUIREMENT", "TASK", "SUPPORT", "EXPLANATION"] as const;
+
+export const internalSubmitSchema = z.object({
+  title:       z.string().min(1, "Title is required").max(255),
+  description: z.string().min(1, "Description is required").max(10000),
+  type:        z.enum(INTERNAL_TICKET_TYPES),
+  priority:    z.enum(PRIORITIES),
+});
+export type InternalSubmitInput = z.infer<typeof internalSubmitSchema>;
+
+// ──────────────────────────────────────
 // Status transition helper
 // ──────────────────────────────────────
 

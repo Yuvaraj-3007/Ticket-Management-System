@@ -13,6 +13,7 @@ import userRoutes from "./routes/users.js";
 import ticketRoutes from "./routes/tickets.js";
 import webhookRoutes from "./routes/webhooks.js";
 import portalRoutes from "./routes/portal.js";
+import internalRoutes from "./routes/internal.js";
 import analyticsRoutes from "./routes/analytics.js";
 import { requireWebhookSecret } from "./middleware/webhook.js";
 import boss from "./lib/boss.js";
@@ -173,6 +174,7 @@ app.get("/api/health", (_req, res) => {
 app.use("/api/users", userRoutes);
 app.use("/api/tickets", ticketRoutes);
 app.use("/api/portal", portalRoutes);
+app.use("/api/internal", internalRoutes);
 app.use("/api/analytics", analyticsRoutes);
 const webhookLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
