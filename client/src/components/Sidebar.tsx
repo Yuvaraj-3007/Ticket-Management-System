@@ -1,11 +1,12 @@
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, Inbox, Users, BarChart2, Building2 } from "lucide-react";
+import { LayoutDashboard, Inbox, Users, BarChart2, Building2, Ticket } from "lucide-react";
 import { useSession } from "@/lib/auth-client";
 import { ROLES, type UserRole } from "@tms/core";
 
 const NAV_ITEMS = [
-  { path: "/",        label: "Dashboard", icon: LayoutDashboard, exact: true  },
-  { path: "/tickets", label: "Tickets",   icon: Inbox,           exact: false },
+  { path: "/",                 label: "Dashboard",  icon: LayoutDashboard, exact: true  },
+  { path: "/tickets",          label: "Tickets",    icon: Inbox,           exact: false },
+  { path: "/internal/tickets", label: "My Tickets", icon: Ticket,          exact: false },
 ];
 
 const ADMIN_ITEMS = [

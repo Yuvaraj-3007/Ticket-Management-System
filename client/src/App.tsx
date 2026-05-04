@@ -19,6 +19,9 @@ import PortalTicketDetail from "@/pages/portal/PortalTicketDetail";
 import PortalDashboard from "@/pages/portal/PortalDashboard";
 import PortalForgotPassword from "@/pages/portal/PortalForgotPassword";
 import PortalResetPassword from "@/pages/portal/PortalResetPassword";
+import InternalSubmit from "@/pages/internal/InternalSubmit";
+import InternalTickets from "@/pages/internal/InternalTickets";
+import InternalTicketDetail from "@/pages/internal/InternalTicketDetail";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { data: session, isPending } = useSession();
@@ -153,6 +156,9 @@ function App() {
           <Route path="/users/:id"   element={<AdminRoute><AgentDetail /></AdminRoute>} />
           <Route path="/clients"     element={<AdminRoute><Clients /></AdminRoute>} />
           <Route path="/analytics"   element={<AdminRoute><Analytics /></AdminRoute>} />
+          <Route path="/internal/submit"      element={<InternalSubmit />} />
+          <Route path="/internal/tickets"     element={<InternalTickets />} />
+          <Route path="/internal/tickets/:id" element={<InternalTicketDetail />} />
         </Route>
       </Routes>
     </BrowserRouter>
