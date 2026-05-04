@@ -47,8 +47,10 @@ COPY server        ./server
 # Copy generated Prisma client from build stage
 COPY --from=prisma /app/server/src/generated ./server/src/generated
 
-# Uploads directory (will be mounted as a volume in production)
+# Uploads directory — must be mounted as a persistent volume in production
+# so uploaded files survive container rebuilds/redeploys.
 RUN mkdir -p /app/server/uploads
+VOLUME /app/server/uploads
 
 # Startup script: runs migrations + seed + server
 COPY server/start.sh /app/start.sh
