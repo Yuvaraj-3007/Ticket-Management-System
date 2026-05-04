@@ -6,7 +6,7 @@ import { z } from "zod";
 
 export const TICKET_TYPES = ["BUG", "REQUIREMENT", "TASK", "SUPPORT", "EXPLANATION", "IMPLEMENTATION"] as const;
 export const PRIORITIES   = ["LOW", "MEDIUM", "HIGH", "CRITICAL"] as const;
-export const STATUSES     = ["UN_ASSIGNED", "OPEN_NOT_STARTED", "OPEN_IN_PROGRESS", "OPEN_QA", "OPEN_DONE", "WAITING_FOR_CLIENT", "CLOSED", "SUBMITTED", "ADMIN_REVIEW", "PLANNING", "CUSTOMER_APPROVAL", "APPROVED"] as const;
+export const STATUSES     = ["UN_ASSIGNED", "OPEN_NOT_STARTED", "OPEN_IN_PROGRESS", "OPEN_QA", "OPEN_DONE", "WAITING_FOR_CLIENT", "CLOSED", "SUBMITTED", "ADMIN_REVIEW", "PLANNING", "CUSTOMER_APPROVAL", "APPROVED", "REOPENED"] as const;
 
 export type TicketTypeValue = (typeof TICKET_TYPES)[number];
 export type PriorityValue   = (typeof PRIORITIES)[number];
@@ -42,6 +42,7 @@ export const STATUS = {
   PLANNING:           "PLANNING",
   CUSTOMER_APPROVAL:  "CUSTOMER_APPROVAL",
   APPROVED:           "APPROVED",
+  REOPENED:           "REOPENED",
 } as const satisfies Record<string, StatusValue>;
 
 // ──────────────────────────────────────
@@ -333,8 +334,9 @@ export function legalNextStatuses(current: StatusValue, type: TicketTypeValue): 
     case STATUS.CUSTOMER_APPROVAL:  return [STATUS.CUSTOMER_APPROVAL, STATUS.APPROVED, STATUS.PLANNING, STATUS.SUBMITTED];
     case STATUS.APPROVED:           return [STATUS.APPROVED, STATUS.OPEN_IN_PROGRESS];
     case STATUS.OPEN_IN_PROGRESS:   return [STATUS.OPEN_IN_PROGRESS, STATUS.OPEN_DONE];
-    case STATUS.OPEN_DONE:          return [STATUS.OPEN_DONE, STATUS.CLOSED];
-    case STATUS.CLOSED:             return [STATUS.CLOSED];
+    case STATUS.OPEN_DONE:          return [STATUS.OPEN_DONE, STATUS.CLOSED, STATUS.REOPENED];
+    case STATUS.CLOSED:             return [STATUS.CLOSED, STATUS.REOPENED];
+    case STATUS.REOPENED:           return [STATUS.REOPENED, STATUS.OPEN_IN_PROGRESS];
     default:                        return [current];
   }
 }

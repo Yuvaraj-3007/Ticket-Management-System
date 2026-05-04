@@ -130,6 +130,38 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
     staleTime: 60_000,
   });
 
+  // Fetch all HRMS clients for the project picker
+  const { data: hrmsClients = [] } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["hrms-clients"],
+    queryFn: async () => {
+      const res = await axios.get(`${API_URL}/api/tickets/clients`, { withCredentials: true });
+      return res.data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Admin explicitly picks a different client; empty string means "use ticket's current client"
+  const [pickerClientOverride, setPickerClientOverride] = useState<string>("");
+  // Derive effective client — prefer explicit override, fall back to ticket's saved value
+  const effectivePickerClientId = pickerClientOverride || (ticket?.hrmsClientId ?? "");
+
+  // Fetch projects for the effective client
+  const { data: hrmsProjects = [] } = useQuery<{ id: string; projectCode: string; projectName: string }[]>({
+    queryKey: ["hrms-projects", effectivePickerClientId],
+    queryFn: async () => {
+      const res = await axios.get(`${API_URL}/api/tickets/projects?clientId=${effectivePickerClientId}`, { withCredentials: true });
+      return res.data;
+    },
+    enabled: !!effectivePickerClientId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const projectMutation = useMutation({
+    mutationFn: ({ projectId, projectName, clientId, clientName }: { projectId: string; projectName: string; clientId: string; clientName: string }) =>
+      axios.patch(`${API_URL}/api/tickets/${ticketId}/project`, { projectId, projectName, clientId, clientName }, { withCredentials: true }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["ticket", ticketId] }),
+  });
+
   const assignMutation = useMutation({
     mutationFn: (assignedToId: string | null) =>
       axios.patch(
@@ -271,7 +303,48 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
 
       {/* Metadata grid: project, sender, status, category, assignee, date */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-4 border rounded-lg bg-muted/30">
-        <DetailRow label="Project">{ticket.project}</DetailRow>
+        <DetailRow label="Project">
+          <div className="space-y-1.5">
+            <select
+              value={effectivePickerClientId}
+              onChange={(e) => setPickerClientOverride(e.target.value)}
+              className="w-full h-8 rounded-md border border-border bg-background px-2 text-xs"
+              aria-label="Client"
+            >
+              <option value="">— Select client —</option>
+              {hrmsClients.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            {effectivePickerClientId && (
+              <select
+                value=""
+                onChange={(e) => {
+                  const proj = hrmsProjects.find((p) => p.id === e.target.value);
+                  if (!proj) return;
+                  const client = hrmsClients.find((c) => c.id === effectivePickerClientId);
+                  projectMutation.mutate({
+                    projectId: proj.id,
+                    projectName: proj.projectName,
+                    clientId: effectivePickerClientId,
+                    clientName: client?.name ?? "",
+                  });
+                }}
+                disabled={projectMutation.isPending || hrmsProjects.length === 0}
+                className="w-full h-8 rounded-md border border-border bg-background px-2 text-xs"
+                aria-label="Project"
+              >
+                <option value="">{ticket.hrmsProjectName ? `${ticket.hrmsProjectName} (change…)` : "— Select project —"}</option>
+                {hrmsProjects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.projectName}</option>
+                ))}
+              </select>
+            )}
+            {projectMutation.isError && (
+              <p className="text-xs text-destructive">Failed to update project</p>
+            )}
+          </div>
+        </DetailRow>
         <DetailRow label="Created by">{ticket.createdBy.name}</DetailRow>
         <DetailRow label="Status">
           <EnumSelect

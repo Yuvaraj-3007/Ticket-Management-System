@@ -12,7 +12,6 @@ import {
   implementationSubmitSchema,
   implementationRejectSchema,
   TICKET_TYPE,
-  TICKET_TYPES,
   PRIORITY,
   STATUS,
   ROLES,
@@ -25,6 +24,7 @@ import {
   sendImplementationRequestSubmittedEmail,
   sendImplementationApprovedEmail,
   sendImplementationRejectedEmail,
+  sendTicketReopenedEmail,
 } from "../lib/mailer.js";
 import { Prisma } from "../generated/prisma/client.js";
 import { uploadArray, validateMagicBytes } from "../lib/upload.js";
@@ -381,7 +381,8 @@ router.get("/dashboard", requireCustomer, async (req, res) => {
   const planning         = getCount("PLANNING");
   const customerApproval = getCount("CUSTOMER_APPROVAL");
   const approved         = getCount("APPROVED");
-  const open       = notStarted + inProgress + qa + done + submitted + adminReview + planning + customerApproval + approved;
+  const reopened   = getCount("REOPENED");
+  const open       = notStarted + inProgress + qa + done + submitted + adminReview + planning + customerApproval + approved + reopened;
 
   res.json({
     total,
@@ -419,8 +420,12 @@ router.get("/tickets", requireCustomer, async (req, res) => {
     page      = "1",
     pageSize  = "10",
   } = req.query as Record<string, string | undefined>;
-  const typeParam  = req.query.type;
-  const typeFilter = Array.isArray(typeParam) ? typeParam as string[] : typeParam ? [typeParam as string] : undefined;
+
+  // type can be a single string or an array (e.g. ?type=BUG&type=SUPPORT)
+  const rawType = req.query.type;
+  const typeFilter: string[] | undefined = rawType
+    ? (Array.isArray(rawType) ? rawType as string[] : [rawType as string])
+    : undefined;
 
   const pageNum  = Math.max(1, parseInt(page  ?? "1",  10) || 1);
   const pageSz   = Math.min(100, Math.max(1, parseInt(pageSize ?? "10", 10) || 10));
@@ -440,6 +445,14 @@ router.get("/tickets", requireCustomer, async (req, res) => {
     hrmsClientId: portalClientId,
   };
 
+  const TICKET_TYPES_SET = new Set(["BUG", "REQUIREMENT", "TASK", "SUPPORT", "EXPLANATION", "IMPLEMENTATION"]);
+  if (typeFilter && typeFilter.some((t) => !TICKET_TYPES_SET.has(t))) {
+    res.status(400).json({ error: "Invalid type value" });
+    return;
+  }
+  if (typeFilter && typeFilter.length > 0) {
+    where.type = { in: typeFilter as any[] };
+  }
   if (status) {
     if (!(STATUSES as readonly string[]).includes(status)) {
       res.status(400).json({ error: "Invalid status value" });
@@ -472,10 +485,6 @@ router.get("/tickets", requireCustomer, async (req, res) => {
   }
   if (from)   where.createdAt = { ...(where.createdAt as any), gte: new Date(from) };
   if (to)     where.createdAt = { ...(where.createdAt as any), lte: new Date(to) };
-  if (typeFilter && typeFilter.length > 0) {
-    const validTypes = typeFilter.filter((t) => (TICKET_TYPES as readonly string[]).includes(t));
-    if (validTypes.length > 0) where.type = { in: validTypes as any[] };
-  }
 
   const [rows, total] = await Promise.all([
     prisma.ticket.findMany({
@@ -1093,6 +1102,48 @@ router.post("/tickets/:id/reject-plan", requireCustomer, async (req: Request<{ i
   }
 
   res.json(updated);
+});
+
+// POST /api/portal/tickets/:id/reopen — customer reopens a closed ticket
+router.post("/tickets/:id/reopen", requireCustomer, async (req: Request<{ id: string }>, res: Response) => {
+  const email = req.user!.email;
+  const id    = req.params.id as string;
+
+  const ticket = await prisma.ticket.findUnique({
+    where:  { ticketId: id },
+    select: { id: true, senderEmail: true, status: true, title: true },
+  });
+
+  if (!ticket) {
+    res.status(404).json({ error: "Ticket not found" });
+    return;
+  }
+  if (ticket.senderEmail !== email) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  if (ticket.status !== "CLOSED" && ticket.status !== "OPEN_DONE") {
+    res.status(400).json({ error: "Only closed or completed tickets can be reopened" });
+    return;
+  }
+
+  await prisma.ticket.update({
+    where: { ticketId: id },
+    data:  { status: "REOPENED" },
+  });
+
+  // Notify admin (fire-and-forget)
+  const baseUrl      = process.env.RIGHT_TRACKER_URL ?? process.env.BETTER_AUTH_URL ?? "";
+  const customerName = req.user!.name ?? email;
+  void sendTicketReopenedEmail(
+    process.env.SUPPORT_EMAIL ?? "",
+    id,
+    ticket.title,
+    customerName,
+    `${baseUrl}/tickets/${id}`,
+  ).catch(() => null);
+
+  res.status(204).send();
 });
 
 export default router;

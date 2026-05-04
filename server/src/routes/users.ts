@@ -24,8 +24,12 @@ router.get("/", async (_req: Request, res: Response) => {
         select:  { id: true, name: true, email: true, role: true, isActive: true, createdAt: true },
         orderBy: { createdAt: "desc" },
       }),
-      // Live fetch from HRMS-POC; returns [] if HRMS unconfigured
-      getEmployeeDirectory().catch(() => []),
+      // Live fetch from HRMS-POC; 5s timeout so a slow/unreachable HRMS server
+      // doesn't hang the Users page indefinitely
+      Promise.race([
+        getEmployeeDirectory().catch(() => []),
+        new Promise<[]>((resolve) => setTimeout(() => resolve([]), 5000)),
+      ]),
     ]);
 
     const tmsEmailSet = new Set(tmsUsers.map((u) => u.email.toLowerCase()));

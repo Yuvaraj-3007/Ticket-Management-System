@@ -74,6 +74,9 @@ function setupGetSuccess(ticket: ApiTicket = BASE_TICKET) {
     if (url.includes("assignable-users")) {
       return Promise.resolve({ data: USERS });
     }
+    if (url.includes("/clients") || url.includes("/projects")) {
+      return Promise.resolve({ data: [] });
+    }
     return Promise.resolve({ data: ticket });
   });
 }
@@ -163,11 +166,11 @@ describe("TicketDetail — ticket data rendering", () => {
     expect(screen.getAllByText("Not Started").length).toBeGreaterThanOrEqual(1);
   });
 
-  it("shows Project label + value (Email Intake)", async () => {
+  it("shows Project label with client/project picker", async () => {
     renderDetail();
     await screen.findByText("TKT-0001");
     expect(screen.getByText("Project")).toBeInTheDocument();
-    expect(screen.getByText("Email Intake")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: /client/i })).toBeInTheDocument();
   });
 
   it("shows Created by label + author name (Admin)", async () => {
