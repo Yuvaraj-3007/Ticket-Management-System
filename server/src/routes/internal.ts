@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middleware/auth.js";
 import prisma from "../lib/prisma.js";
-import { internalSubmitSchema, ROLES, type StatusValue } from "@tms/core";
+import { internalSubmitSchema, ROLES, STATUSES } from "@tms/core";
 import { type Status } from "../generated/prisma/client.js";
 
 const router = Router();
@@ -70,13 +70,19 @@ router.post("/tickets", async (req: Request, res: Response) => {
 router.get("/tickets", async (req: Request, res: Response) => {
   const page     = Math.max(1, Number(req.query.page) || 1);
   const pageSize = Math.min(50, Math.max(1, Number(req.query.pageSize) || 20));
-  const status   = typeof req.query.status === "string" && req.query.status ? req.query.status : undefined;
-  const userId   = req.user!.id;
+  const statusRaw = typeof req.query.status === "string" && req.query.status ? req.query.status : undefined;
+  const userId    = req.user!.id;
+
+  if (statusRaw && !(STATUSES as readonly string[]).includes(statusRaw)) {
+    res.status(400).json({ error: "Invalid status value" });
+    return;
+  }
+  const status = statusRaw as Status | undefined;
 
   try {
     const where = {
       createdById: userId,
-      ...(status ? { status: status as Status } : {}),
+      ...(status ? { status } : {}),
     };
 
     const [tickets, total] = await Promise.all([
@@ -115,7 +121,7 @@ router.get("/tickets/:id", async (req: Request<{ id: string }>, res: Response) =
         createdAt:   true,
         updatedAt:   true,
         assignedTo:  { select: { id: true, name: true } },
-        attachments: { select: { id: true, filename: true, mimetype: true, size: true, filepath: true, createdAt: true } },
+        attachments: { select: { id: true, filename: true, mimetype: true, size: true, createdAt: true } },
       },
     });
 

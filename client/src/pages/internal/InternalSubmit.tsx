@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { EnumSelect } from "@/components/EnumSelect";
 import { CheckCircle2 } from "lucide-react";
 
 const TYPE_LABELS: Record<string, string> = {
@@ -79,27 +79,23 @@ export default function InternalSubmit() {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Type</Label>
-              <Select value={watch("type")} onValueChange={(v) => setValue("type", v as InternalSubmitInput["type"])}>
-
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {INTERNAL_TICKET_TYPES.map((t) => (
-                    <SelectItem key={t} value={t}>{TYPE_LABELS[t]}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <EnumSelect
+                value={watch("type")}
+                options={INTERNAL_TICKET_TYPES}
+                labels={TYPE_LABELS}
+                onValueChange={(v) => setValue("type", v as InternalSubmitInput["type"])}
+                width="w-full"
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Priority</Label>
-              <Select value={watch("priority")} onValueChange={(v) => setValue("priority", v as InternalSubmitInput["priority"])}>
-
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {PRIORITIES.map((p) => (
-                    <SelectItem key={p} value={p}>{PRIORITY_LABELS[p]}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <EnumSelect
+                value={watch("priority")}
+                options={PRIORITIES}
+                labels={PRIORITY_LABELS}
+                onValueChange={(v) => setValue("priority", v as InternalSubmitInput["priority"])}
+                width="w-full"
+              />
             </div>
           </div>
 
