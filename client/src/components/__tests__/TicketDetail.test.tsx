@@ -205,22 +205,24 @@ describe("TicketDetail — hours fields rendering", () => {
     vi.clearAllMocks();
   });
 
-  it("renders estimated and actual hours as Nh when set", async () => {
+  it("renders estimated and actual hours as numeric inputs when set", async () => {
     setupGetSuccess({ ...BASE_TICKET, estimatedHours: 8, actualHours: 4 });
     renderDetail();
     await screen.findByText("TKT-0001");
     expect(screen.getByText("Estimated Hours")).toBeInTheDocument();
     expect(screen.getByText("Actual Hours")).toBeInTheDocument();
-    expect(screen.getByTestId("estimated-hours-display")).toHaveTextContent("8h");
-    expect(screen.getByTestId("actual-hours-display")).toHaveTextContent("4h");
+    expect(screen.getByTestId("estimated-hours-display")).toHaveValue(8);
+    expect(screen.getByTestId("actual-hours-display")).toHaveValue(4);
   });
 
-  it("renders an em-dash when both hours fields are null", async () => {
+  it("renders empty inputs with em-dash placeholder when both hours fields are null", async () => {
     setupGetSuccess({ ...BASE_TICKET, estimatedHours: null, actualHours: null });
     renderDetail();
     await screen.findByText("TKT-0001");
-    expect(screen.getByTestId("estimated-hours-display")).toHaveTextContent("—");
-    expect(screen.getByTestId("actual-hours-display")).toHaveTextContent("—");
+    expect(screen.getByTestId("estimated-hours-display")).toHaveValue(null);
+    expect(screen.getByTestId("actual-hours-display")).toHaveValue(null);
+    expect(screen.getByTestId("estimated-hours-display")).toHaveAttribute("placeholder", "—");
+    expect(screen.getByTestId("actual-hours-display")).toHaveAttribute("placeholder", "—");
   });
 });
 
@@ -472,7 +474,8 @@ describe("TicketDetail — assign mutation", () => {
     await userEvent.click(assigneeTrigger);
 
     const items = document.querySelectorAll('[data-slot="select-item"]');
-    await userEvent.click(items[1]);
+    const aliceItem = Array.from(items).find((i) => i.textContent?.includes("Alice Agent")) as HTMLElement;
+    await userEvent.click(aliceItem);
 
     await waitFor(() => {
       expect(screen.getByText(/failed to update assignee/i)).toBeInTheDocument();

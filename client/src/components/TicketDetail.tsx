@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/select";
 
 const API_URL = import.meta.env.VITE_API_URL || "";
-const NO_CLIENT = NO_CLIENT;
+const NO_CLIENT = "__none__";
 
 // ─── Attachment helpers ───────────────────────────────────────────────────────
 
@@ -381,9 +381,9 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
           <div className="space-y-1.5">
             <Select
               value={effectivePickerClientId || NO_CLIENT}
-              onValueChange={(val) => setPickerClientOverride(val === NO_CLIENT ? "" : val)}
+              onValueChange={(val) => setPickerClientOverride(!val || val === NO_CLIENT ? "" : val)}
             >
-              <SelectTrigger size="sm" className="w-full">
+              <SelectTrigger size="sm" className="w-full" aria-label="Client">
                 {effectivePickerClientId ? (
                   <span>{hrmsClients.find((c) => c.id === effectivePickerClientId)?.name ?? "—"}</span>
                 ) : (
@@ -391,7 +391,7 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
                 )}
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value=NO_CLIENT>
+                <SelectItem value={NO_CLIENT}>
                   <span className="text-muted-foreground">— Select client —</span>
                 </SelectItem>
                 {hrmsClients.map((c) => (
