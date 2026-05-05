@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { ImageUploadField } from "@/components/portal/ImageUploadField";
 import { statusVariant, STATUS_LABELS } from "@/lib/ticket-badges";
 import { ImplementationStatusPanel, type ImplementationRequestData } from "@/components/ImplementationStatusPanel";
+import { DetailRow } from "@/components/DetailRow";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -65,17 +66,6 @@ function formatDate(iso: string): string {
     year: "numeric", month: "short", day: "numeric",
     hour: "2-digit", minute: "2-digit",
   });
-}
-
-// ─── Detail row ───────────────────────────────────────────────────────────────
-
-function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</span>
-      <div className="text-sm">{children}</div>
-    </div>
-  );
 }
 
 // ─── Star Rating ──────────────────────────────────────────────────────────────

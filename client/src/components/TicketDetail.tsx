@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import axios from "axios";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
@@ -8,6 +8,7 @@ import {
   TICKET_TYPES,
   PRIORITIES,
   TICKET_TYPE,
+  STATUS,
   legalNextStatuses,
   type StatusValue,
   type TicketTypeValue,
@@ -24,6 +25,7 @@ import {
 import { Sparkles, Loader2 } from "lucide-react";
 import { EnumSelect } from "@/components/EnumSelect";
 import { ImplementationPanel } from "@/components/ImplementationPanel";
+import { DetailRow } from "@/components/DetailRow";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -35,12 +37,42 @@ import {
 } from "@/components/ui/select";
 
 const API_URL = import.meta.env.VITE_API_URL || "";
+const NO_CLIENT = NO_CLIENT;
 
 // ─── Attachment helpers ───────────────────────────────────────────────────────
 
 const ATTACHMENT_PREFIX_RE = /^d(\d+)_/;
 
-function AttachmentRow({ attachments }: { attachments: Array<{ id: string; filename: string; mimetype: string; url: string }> }) {
+function AttachmentThumb({
+  a,
+}: {
+  a: { filename: string; mimetype: string; url: string };
+}) {
+  const [imgError, setImgError] = useState(false);
+  const isImage = a.mimetype.startsWith("image/") && !imgError;
+  return (
+    <div className="w-20 h-20 rounded-md border overflow-hidden bg-muted/30 flex items-center justify-center">
+      {isImage ? (
+        <img
+          src={a.url}
+          alt={a.filename}
+          className="w-full h-full object-cover group-hover:opacity-80 transition-opacity"
+          onError={() => setImgError(true)}
+        />
+      ) : (
+        <span className="text-xs text-muted-foreground text-center px-1 break-all">
+          {a.filename.replace(ATTACHMENT_PREFIX_RE, "")}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function AttachmentRow({
+  attachments,
+}: {
+  attachments: Array<{ id: string; filename: string; mimetype: string; url: string }>;
+}) {
   if (attachments.length === 0) return null;
   return (
     <div className="flex flex-wrap gap-3 mt-3">
@@ -53,31 +85,70 @@ function AttachmentRow({ attachments }: { attachments: Array<{ id: string; filen
           className="flex flex-col items-center gap-1 group"
           title={a.filename}
         >
-          <div className="w-20 h-20 rounded-md border overflow-hidden bg-muted/30 flex items-center justify-center">
-            {a.mimetype.startsWith("image/") ? (
-              <img
-                src={a.url}
-                alt={a.filename}
-                className="w-full h-full object-cover group-hover:opacity-80 transition-opacity"
-              />
-            ) : (
-              <span className="text-xs text-muted-foreground text-center px-1 break-all">{a.filename}</span>
-            )}
-          </div>
-          <span className="text-xs text-muted-foreground max-w-[80px] truncate">{a.filename.replace(ATTACHMENT_PREFIX_RE, "")}</span>
+          <AttachmentThumb a={a} />
+          <span className="text-xs text-muted-foreground max-w-[80px] truncate">
+            {a.filename.replace(ATTACHMENT_PREFIX_RE, "")}
+          </span>
         </a>
       ))}
     </div>
   );
 }
 
-// ─── Detail row helper ────────────────────────────────────────────────────────
+// ─── Description body ─────────────────────────────────────────────────────────
 
-function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
+function DescriptionBody({
+  description,
+  attachments,
+}: {
+  description: string;
+  attachments: Array<{ id: string; filename: string; mimetype: string; url: string; createdAt: string; size: number }>;
+}) {
+  const sections = description.split("\n\n---\n\n");
+  const generalAttachments = attachments.filter((a) => !ATTACHMENT_PREFIX_RE.test(a.filename));
+
+  if (sections.length === 1) {
+    const sectionAttachments = attachments.filter((a) => {
+      const m = a.filename.match(ATTACHMENT_PREFIX_RE);
+      return m ? Number(m[1]) === 0 : false;
+    });
+    return (
+      <>
+        <pre className="text-sm whitespace-pre-wrap font-sans leading-relaxed">{description}</pre>
+        <AttachmentRow attachments={[...sectionAttachments, ...generalAttachments]} />
+      </>
+    );
+  }
+
   return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</span>
-      <div className="text-sm">{children}</div>
+    <div className="space-y-4">
+      {sections.map((section, idx) => {
+        const sectionAttachments = attachments.filter((a) => {
+          const m = a.filename.match(ATTACHMENT_PREFIX_RE);
+          return m ? Number(m[1]) === idx : false;
+        });
+        return (
+          <div key={idx}>
+            {idx > 0 && (
+              <>
+                <hr className="mb-3" style={{ borderColor: "var(--rt-border)" }} />
+                <p className="text-xs font-semibold uppercase tracking-wide mb-2 text-muted-foreground">
+                  Description {idx + 1}
+                </p>
+              </>
+            )}
+            <pre className="text-sm whitespace-pre-wrap font-sans leading-relaxed">{section}</pre>
+            <AttachmentRow attachments={sectionAttachments} />
+          </div>
+        );
+      })}
+      {generalAttachments.length > 0 && (
+        <div>
+          <hr className="mb-3" style={{ borderColor: "var(--rt-border)" }} />
+          <p className="text-xs font-semibold uppercase tracking-wide mb-2 text-muted-foreground">Attachments</p>
+          <AttachmentRow attachments={generalAttachments} />
+        </div>
+      )}
     </div>
   );
 }
@@ -97,6 +168,13 @@ interface TicketDetailProps {
 function TicketDetail({ ticketId }: TicketDetailProps) {
   const queryClient = useQueryClient();
   const [summary, setSummary] = useState<string | null>(null);
+
+  // Hours inputs — controlled with focus-aware sync so unrelated mutation
+  // refetches never discard in-progress edits.
+  const estimatedRef = useRef<HTMLInputElement>(null);
+  const actualRef    = useRef<HTMLInputElement>(null);
+  const [estimatedVal, setEstimatedVal] = useState("");
+  const [actualVal, setActualVal]       = useState("");
 
   const summarizeMutation = useMutation({
     mutationFn: () =>
@@ -130,7 +208,6 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
     staleTime: 60_000,
   });
 
-  // Fetch all HRMS clients for the project picker
   const { data: hrmsClients = [] } = useQuery<{ id: string; name: string }[]>({
     queryKey: ["hrms-clients"],
     queryFn: async () => {
@@ -140,12 +217,9 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Admin explicitly picks a different client; empty string means "use ticket's current client"
   const [pickerClientOverride, setPickerClientOverride] = useState<string>("");
-  // Derive effective client — prefer explicit override, fall back to ticket's saved value
   const effectivePickerClientId = pickerClientOverride || (ticket?.hrmsClientId ?? "");
 
-  // Fetch projects for the effective client
   const { data: hrmsProjects = [] } = useQuery<{ id: string; projectCode: string; projectName: string }[]>({
     queryKey: ["hrms-projects", effectivePickerClientId],
     queryFn: async () => {
@@ -169,33 +243,25 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
         { assignedToId },
         { withCredentials: true },
       ),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["ticket", ticketId] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["ticket", ticketId] }),
   });
 
   const statusMutation = useMutation({
     mutationFn: (status: StatusValue) =>
       axios.patch(`${API_URL}/api/tickets/${ticketId}/status`, { status }, { withCredentials: true }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["ticket", ticketId] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["ticket", ticketId] }),
   });
 
   const typeMutation = useMutation({
     mutationFn: (type: TicketTypeValue) =>
       axios.patch(`${API_URL}/api/tickets/${ticketId}/type`, { type }, { withCredentials: true }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["ticket", ticketId] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["ticket", ticketId] }),
   });
 
   const priorityMutation = useMutation({
     mutationFn: (priority: PriorityValue) =>
       axios.patch(`${API_URL}/api/tickets/${ticketId}/priority`, { priority }, { withCredentials: true }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["ticket", ticketId] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["ticket", ticketId] }),
   });
 
   const estimatedHoursMutation = useMutation({
@@ -232,19 +298,27 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
       return res.data as { estimatedHours: number };
     },
     onSuccess: (data) => {
-      // Apply the AI suggestion via the regular PATCH mutation so the
-      // estimated-hours field updates and the ticket query is invalidated.
       estimatedHoursMutation.mutate(data.estimatedHours);
     },
   });
 
-  // Hours inputs are uncontrolled — typing only updates the input element;
-  // we read e.target.value on blur and commit via mutation. The `key` prop
-  // (server-confirmed value) re-mounts the input whenever the ticket value
-  // changes externally so the displayed value stays in sync without an
-  // effect that calls setState (which trips react-hooks/set-state-in-effect).
+  // Derived server values for hours sync
   const estimatedDefault = ticket?.estimatedHours == null ? "" : String(Number(ticket.estimatedHours));
   const actualDefault    = ticket?.actualHours    == null ? "" : String(Number(ticket.actualHours));
+
+  // Sync hours inputs from the server-confirmed value, but skip while focused
+  // so that unrelated mutation refetches don't discard in-progress typing.
+  useEffect(() => {
+    if (document.activeElement !== estimatedRef.current) {
+      setEstimatedVal(estimatedDefault);
+    }
+  }, [estimatedDefault]);
+
+  useEffect(() => {
+    if (document.activeElement !== actualRef.current) {
+      setActualVal(actualDefault);
+    }
+  }, [actualDefault]);
 
   function commitHours(
     raw: string,
@@ -301,26 +375,35 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
         <h2 className="text-xl sm:text-2xl font-bold">{ticket.title}</h2>
       </div>
 
-      {/* Metadata grid: project, sender, status, category, assignee, date */}
+      {/* Metadata grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-4 border rounded-lg bg-muted/30">
         <DetailRow label="Project">
           <div className="space-y-1.5">
-            <select
-              value={effectivePickerClientId}
-              onChange={(e) => setPickerClientOverride(e.target.value)}
-              className="w-full h-8 rounded-md border border-border bg-background px-2 text-xs"
-              aria-label="Client"
+            <Select
+              value={effectivePickerClientId || NO_CLIENT}
+              onValueChange={(val) => setPickerClientOverride(val === NO_CLIENT ? "" : val)}
             >
-              <option value="">— Select client —</option>
-              {hrmsClients.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+              <SelectTrigger size="sm" className="w-full">
+                {effectivePickerClientId ? (
+                  <span>{hrmsClients.find((c) => c.id === effectivePickerClientId)?.name ?? "—"}</span>
+                ) : (
+                  <span className="text-muted-foreground">Select client…</span>
+                )}
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value=NO_CLIENT>
+                  <span className="text-muted-foreground">— Select client —</span>
+                </SelectItem>
+                {hrmsClients.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {effectivePickerClientId && (
-              <select
+              <Select
                 value=""
-                onChange={(e) => {
-                  const proj = hrmsProjects.find((p) => p.id === e.target.value);
+                onValueChange={(val) => {
+                  const proj = hrmsProjects.find((p) => p.id === val);
                   if (!proj) return;
                   const client = hrmsClients.find((c) => c.id === effectivePickerClientId);
                   projectMutation.mutate({
@@ -331,21 +414,34 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
                   });
                 }}
                 disabled={projectMutation.isPending || hrmsProjects.length === 0}
-                className="w-full h-8 rounded-md border border-border bg-background px-2 text-xs"
-                aria-label="Project"
               >
-                <option value="">{ticket.hrmsProjectName ? `${ticket.hrmsProjectName} (change…)` : "— Select project —"}</option>
-                {hrmsProjects.map((p) => (
-                  <option key={p.id} value={p.id}>{p.projectName}</option>
-                ))}
-              </select>
+                <SelectTrigger size="sm" className="w-full">
+                  {ticket.hrmsProjectName ? (
+                    <span>
+                      {ticket.hrmsProjectName}{" "}
+                      <span className="text-muted-foreground">(change…)</span>
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">Select project…</span>
+                  )}
+                </SelectTrigger>
+                <SelectContent>
+                  {hrmsProjects.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.projectName}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
             {projectMutation.isError && (
               <p className="text-xs text-destructive">Failed to update project</p>
             )}
           </div>
         </DetailRow>
-        <DetailRow label="Created by">{ticket.createdBy.name}</DetailRow>
+
+        <DetailRow label="Created by">
+          {ticket.senderName ?? ticket.createdBy.name}
+        </DetailRow>
+
         <DetailRow label="Status">
           <EnumSelect
             value={ticket.status}
@@ -357,6 +453,7 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
             errorMessage="Failed to update status"
           />
         </DetailRow>
+
         <DetailRow label="Category">
           <EnumSelect
             value={ticket.type}
@@ -368,6 +465,7 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
             errorMessage="Failed to update category"
           />
         </DetailRow>
+
         <DetailRow label="Priority">
           <EnumSelect
             value={ticket.priority}
@@ -379,15 +477,18 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
             errorMessage="Failed to update priority"
           />
         </DetailRow>
+
         <DetailRow label="Estimated Hours">
           <div className="flex items-center gap-2">
             <input
-              key={`estimated-${estimatedDefault}`}
+              ref={estimatedRef}
+              data-testid="estimated-hours-display"
               type="number"
               min="0"
               max="9999.99"
               step="0.25"
-              defaultValue={estimatedDefault}
+              value={estimatedVal}
+              onChange={(e) => setEstimatedVal(e.target.value)}
               onBlur={(e) =>
                 commitHours(
                   e.currentTarget.value,
@@ -415,9 +516,6 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
               )}
               AI
             </button>
-            <span className="text-xs text-muted-foreground" data-testid="estimated-hours-display">
-              {ticket.estimatedHours == null ? "—" : `${Number(ticket.estimatedHours)}h`}
-            </span>
             {estimatedHoursMutation.isPending && !aiEstimateMutation.isPending && (
               <span className="text-xs text-muted-foreground">Saving…</span>
             )}
@@ -429,15 +527,18 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
             <p className="text-xs text-destructive mt-1">Failed to get AI estimate</p>
           )}
         </DetailRow>
+
         <DetailRow label="Actual Hours">
           <div className="flex items-center gap-2">
             <input
-              key={`actual-${actualDefault}`}
+              ref={actualRef}
+              data-testid="actual-hours-display"
               type="number"
               min="0"
               max="9999.99"
               step="0.25"
-              defaultValue={actualDefault}
+              value={actualVal}
+              onChange={(e) => setActualVal(e.target.value)}
               onBlur={(e) =>
                 commitHours(
                   e.currentTarget.value,
@@ -450,9 +551,6 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
               aria-label="Actual hours"
               className="h-9 px-3 rounded-md border border-border bg-background text-sm w-[100px] disabled:opacity-50"
             />
-            <span className="text-xs text-muted-foreground" data-testid="actual-hours-display">
-              {ticket.actualHours == null ? "—" : `${Number(ticket.actualHours)}h`}
-            </span>
             {actualHoursMutation.isPending && (
               <span className="text-xs text-muted-foreground">Saving…</span>
             )}
@@ -468,6 +566,7 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
             <p className="text-xs text-destructive mt-1">Failed to update actual hours</p>
           )}
         </DetailRow>
+
         <DetailRow label="Assigned to">
           <Select
             value={ticket.assignedTo?.id ?? "unassigned"}
@@ -492,6 +591,7 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
             <p className="text-xs text-destructive mt-1">Failed to update assignee</p>
           )}
         </DetailRow>
+
         <DetailRow label="Created">
           {new Date(ticket.createdAt).toLocaleString(undefined, {
             year: "numeric", month: "short", day: "numeric",
@@ -518,55 +618,7 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
           </Button>
         </div>
         <div className="border rounded-lg p-4 bg-muted/20">
-          {(() => {
-            const sections = ticket.description.split("\n\n---\n\n");
-            const generalAttachments = ticket.attachments.filter((a) => !ATTACHMENT_PREFIX_RE.test(a.filename));
-
-            if (sections.length === 1) {
-              const sectionAttachments = ticket.attachments.filter((a) => {
-                const m = a.filename.match(ATTACHMENT_PREFIX_RE);
-                return m ? Number(m[1]) === 0 : false;
-              });
-              return (
-                <>
-                  <pre className="text-sm whitespace-pre-wrap font-sans leading-relaxed">{ticket.description}</pre>
-                  <AttachmentRow attachments={[...sectionAttachments, ...generalAttachments]} />
-                </>
-              );
-            }
-
-            return (
-              <div className="space-y-4">
-                {sections.map((section, idx) => {
-                  const sectionAttachments = ticket.attachments.filter((a) => {
-                    const m = a.filename.match(ATTACHMENT_PREFIX_RE);
-                    return m ? Number(m[1]) === idx : false;
-                  });
-                  return (
-                    <div key={idx}>
-                      {idx > 0 && (
-                        <>
-                          <hr className="mb-3" style={{ borderColor: "var(--rt-border)" }} />
-                          <p className="text-xs font-semibold uppercase tracking-wide mb-2 text-muted-foreground">
-                            Description {idx + 1}
-                          </p>
-                        </>
-                      )}
-                      <pre className="text-sm whitespace-pre-wrap font-sans leading-relaxed">{section}</pre>
-                      <AttachmentRow attachments={sectionAttachments} />
-                    </div>
-                  );
-                })}
-                {generalAttachments.length > 0 && (
-                  <div>
-                    <hr className="mb-3" style={{ borderColor: "var(--rt-border)" }} />
-                    <p className="text-xs font-semibold uppercase tracking-wide mb-2 text-muted-foreground">Attachments</p>
-                    <AttachmentRow attachments={generalAttachments} />
-                  </div>
-                )}
-              </div>
-            );
-          })()}
+          <DescriptionBody description={ticket.description} attachments={ticket.attachments} />
         </div>
         {summarizeMutation.isError && (
           <p className="text-xs text-destructive mt-2">Failed to summarize. Please try again.</p>
@@ -580,7 +632,7 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
       </div>
 
       {/* Customer rating — only shown on closed tickets that have a rating */}
-      {ticket.status === "CLOSED" && ticket.rating != null && (
+      {ticket.status === STATUS.CLOSED && ticket.rating != null && (
         <div className="border rounded-lg p-4 bg-muted/20">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
             Customer Rating
@@ -608,8 +660,7 @@ function TicketDetail({ ticketId }: TicketDetailProps) {
         </div>
       )}
 
-      {/* Closed with no rating yet */}
-      {ticket.status === "CLOSED" && ticket.rating == null && (
+      {ticket.status === STATUS.CLOSED && ticket.rating == null && (
         <div className="border rounded-lg p-4 bg-muted/20">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
             Customer Rating
